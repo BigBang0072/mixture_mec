@@ -10,8 +10,10 @@ class GaussianSCM:
     def __init__(self,args):
         '''
         '''
-        print("==================================")
-        print("Generating SCM")
+        self.debug=args["debug_mode"] if "debug" in args["debug_mode"] else False
+        if self.debug:
+            print("==================================")
+            print("Generating SCM")
         #Paramters for true underlying SCM
         self.noise_mu = np.array(args["noise_mean_list"],dtype=np.float32)
         self.noise_D = np.diag(args["noise_sigma_list"])
@@ -86,11 +88,12 @@ class GaussianSCM:
                         Si = Si,
                         mui = x_mui
         )
-        print("==================================")
-        pprint("Generating samples for:")
-        pprint(intv_args)
-        pprint("True params:")
-        pprint(true_params)
+        if self.debug:
+            print("==================================")
+            pprint("Generating samples for:")
+            pprint(intv_args)
+            pprint("True params:")
+            pprint(true_params)
 
         return X,true_params
 
