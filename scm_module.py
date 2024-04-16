@@ -10,7 +10,7 @@ class GaussianSCM:
     def __init__(self,args):
         '''
         '''
-        self.debug=args["debug_mode"] if "debug" in args["debug_mode"] else False
+        self.debug=args["debug_mode"] if "debug_mode" in args else False
         if self.debug:
             print("==================================")
             print("Generating SCM")
