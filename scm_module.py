@@ -1,5 +1,4 @@
 import numpy as np
-from sklearn.mixture import GaussianMixture
 import pdb
 from pprint import pprint
 import itertools as it
