@@ -1,8 +1,58 @@
 import numpy as np
 import pdb
 from pprint import pprint
-import itertools as it
-import matplotlib.pyplot as plt
+
+
+class RandomSCMGenerator():
+    '''
+    '''
+    def __init__(self,num_nodes,max_strength,num_parents,):
+        '''
+        max_strength : the strenght of the parents
+        num_parents  : the number of parent for each node
+        '''
+        self.num_nodes = num_nodes
+        self.max_strength = max_strength
+        self.num_parents = num_parents
+
+    def generate_random_adj_mat(self,tol=1e-1):
+        '''
+        This function will return random graph controlling the following parameters:
+        1. strength of connections
+        2. sparsity of connection
+        '''
+        #Generating the edges with a particular strength
+        A = np.array([np.random.choice([
+                                np.random.uniform(-self.max_strength,-tol),
+                                np.random.uniform(tol,self.max_strength)
+                        ])
+                        for _ in range(self.num_nodes*self.num_nodes)]).reshape(
+                                                    self.num_nodes,self.num_nodes)
+        A = np.tril(A,-1)
+
+        #Next we will ensure number of parents is within max limits
+        for nidx in range(self.num_nodes):
+            mask = np.array([1,]*self.num_parents + [0,]*(nidx-self.num_parents))
+            np.random.shuffle(mask)
+            mask_vec = np.zeros(self.num_nodes)
+            mask_vec[0:mask.shape[0]]=mask
+            A[nidx,:]=A[nidx,:]*mask_vec
+        
+        assert np.sum(np.diag(A))==0.0,"Diagnoal non zero"
+        
+        return A
+    
+    def generate_gaussian_scm(self,scm_args):
+        '''
+        '''
+        #First of all sample a random graph
+        adj_mat = self.generate_random_adj_mat()
+        #Generating a random SCM
+        scm_args["adj_mat"] = adj_mat
+        gSCM = GaussianSCM(scm_args)
+
+        return gSCM
+
 
 class GaussianSCM:
     '''
@@ -44,7 +94,7 @@ class GaussianSCM:
         x_mui = np.matmul(Bi,noise_mui)
         return X,Si,x_mui
     
-    def generate_sample_with_atomic_intervention(self,num_samples,intv_args):
+    def _generate_sample_with_atomic_intervention(self,num_samples,intv_args):
         '''
         interv_args: 
             inode : intervened node
@@ -96,6 +146,49 @@ class GaussianSCM:
             pprint(true_params)
 
         return X,true_params
+    
+    def generate_gaussian_mixture(self,intv_targets,new_noise_mean,num_samples):
+        '''
+        '''
+        #Genetaing the samples from each of the mixture
+        intv_args_dict={}
+        mixture_samples=[]
+        
+        #We will keep the net number of sample same so that the number of component doesnt have any effect
+        num_samples = num_samples//(len(intv_targets)+1)
+        
+        for nidx in intv_targets:
+            #Creating the interv args
+            intv_args=dict(
+                        intv_type="do",
+                        inode=nidx,
+                        new_mui=new_noise_mean, #need not keep it different
+            )
+            #Generating the samples for this internvetions
+            X,true_params = self._generate_sample_with_atomic_intervention(
+                                            num_samples=num_samples,
+                                            intv_args=intv_args
+            )
+            mixture_samples.append(X)
+            #Upting the true param of this dist to compare later
+            intv_args["true_params"]=true_params
+            intv_args_dict[str(nidx)]=intv_args
+        #Adding the observational distribution
+        intv_args=dict(intv_type="obs")
+        Xobs,obs_true_params = self._generate_sample_with_atomic_intervention(
+                                            num_samples=num_samples,
+                                            intv_args=intv_args
+        )
+        mixture_samples.append(Xobs)
+        intv_args["true_params"]=obs_true_params
+        intv_args_dict["obs"]=intv_args
+
+
+
+        #Consolidating all the samples into one big pile
+        mixture_samples = np.concatenate(mixture_samples,axis=0)
+
+        return intv_args_dict,mixture_samples
 
 
 if __name__=="__main__":
