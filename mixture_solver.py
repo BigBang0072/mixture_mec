@@ -44,7 +44,6 @@ class GaussianMixtureSolver():
             print("min_perm:",min_perm)
         return min_err,min_perm
 
-
     def mixture_disentangler(self,intv_args_dict,mixture_samples,debug=False):
         #Now we are ready run the mini disentanglement algos
         gm = GaussianMixture(n_components=len(intv_args_dict),random_state=0).fit(
@@ -60,3 +59,5 @@ class GaussianMixtureSolver():
             pprint(gm.covariances_*(gm.covariances_>1e-5))
         min_err,min_perm = self.get_best_estimated_matching_error(intv_args_dict,gm)
         return min_err,min_perm
+    
+    def 
