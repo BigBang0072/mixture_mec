@@ -205,9 +205,9 @@ def run_mixture_disentangle(args):
 
     #Step 2: Finding the graph for each component
     print("Stage 2: Estimating individual graph using PC")
-    # gSolver.run_pc_over_each_component(intv_args_dict,args["pc_samples"])
+    # gSolver.run_pc_over_each_component(intv_args_dict,args["stage2_samples"])
     est_dag,intv_args_dict = gSolver.identify_intervention_utigsp(
-                                        intv_args_dict,args["pc_samples"])
+                                        intv_args_dict,args["stage2_samples"])
     metric_dict["est_dag"]=est_dag
 
 
@@ -230,10 +230,15 @@ def run_mixture_disentangle(args):
     print("actgraph:\n",metric_dict["act_dag"])
     print("est graph:\n",metric_dict["est_dag"])
 
+    #Computing the js of target
+    print("==========================")
+    metric_dict=compute_target_jaccard_sim(intv_args_dict,metric_dict)
+    print("Avg JS:",metric_dict["avg_js"])
+    
+    
     #Dumping the experiment
     pickle_experiment_result_json(args,intv_args_dict,metric_dict)
     return intv_args_dict,metric_dict
-
 
 def compute_shd(intv_args_dict,metric_dict):
     '''
@@ -261,6 +266,28 @@ def compute_shd(intv_args_dict,metric_dict):
     shd = est_dag.shd(act_dag)
     metric_dict["shd"]=shd
 
+    return metric_dict
+
+def compute_target_jaccard_sim(intv_args_dict,metric_dict):
+    '''
+    #Assumption: This assumes that the component is atomic
+    right now.
+    '''
+    similarity_list = []
+    for comp in intv_args_dict.keys():
+        if comp=="obs":
+            continue 
+        
+        #Computing the similarity for each component
+        actual_tgt = set([int(comp)])
+        est_tgt = set(intv_args_dict[comp]["est_tgt"])
+
+        js = len(est_tgt.intersection(actual_tgt))\
+                    /len(est_tgt.union(actual_tgt))
+        similarity_list.append(js)
+    
+    avg_js = np.mean(similarity_list)
+    metric_dict["avg_js"]=avg_js
     return metric_dict
 
 
@@ -299,20 +326,65 @@ def pickle_experiment_result_json(expt_args,intv_args_dict,metric_dict):
 
 
 
+def jobber(all_expt_config):
+    '''
+    '''
+    #First of all we have to generate all possible experiments
+    flatten_args_key = []
+    flatten_args_val = []
+    for key,val in all_expt_config.items():
+        flatten_args_key.append(key)
+        flatten_args_val.append(val)
+    
+    #Getting all the porblem configs
+    problem_configs = list(it.product(*flatten_args_val))
+    #Now generating all the experimetns arg
+    all_expt_args = []
+
+    for cidx,config in enumerate(problem_configs):
+        config_dict = {
+            key:val for key,val in zip(flatten_args_key,config)
+        }
+
+        args = dict(
+                exp_name="{}".format(cidx),
+                num_nodes = config_dict["num_nodes"],
+                obs_noise_mean = config_dict["obs_noise_mean"],
+                obs_noise_var = config_dict["obs_noise_var"],
+                max_edge_strength = config_dict["max_edge_strength"],
+                num_parents = config_dict["num_parents"],
+                new_noise_mean = config_dict["new_noise_mean"],
+                mix_samples = config_dict["sample_size"],
+                stage2_samples = config_dict["sample_size"],
+        )
+        if config_dict["intv_targets"]=="all":
+            args["intv_targets"]=list(range(config_dict["num_nodes"]))
+        else:
+            raise NotImplementedError
+        
+        #Running the experiment serially first
+        intv_args_dict,metric_dict = run_mixture_disentangle(args)
+        print("=================================================")
+        print("\n\n\n\n\n\n")
+
+    
+
 if __name__=="__main__":
-    exp_name="1"
-    num_nodes = 4
-    num_samples = 12800
-    args = dict(
-            exp_name=exp_name,
-            num_nodes = num_nodes,
-            obs_noise_mean = 0.5,
-            obs_noise_var = 1.0,
-            max_edge_strength = 10,
-            num_parents = 2,
-            intv_targets = list(range(num_nodes)),
-            new_noise_mean = 10.0,
-            mix_samples=num_samples,
-            pc_samples =num_samples,
+    # Graphs Related Parameters
+    all_expt_config = dict(
+        run_list = [0,1,2], #for random runs with same config, needed?
+        num_nodes = [4,8],
+        max_edge_strength = [10],
+        num_parents = [2],
+        obs_noise_mean = [0.5],
+        obs_noise_var = [1.0],
+        #Intervnetion related related parameretrs
+        new_noise_mean=[10.0],
+        intv_targets = ["all"],
+        #Sample and other statistical parameters
+        sample_size = [2**idx for idx in range(10,18)],
     )
-    intv_args_dict,metric_dict = run_mixture_disentangle(args)
+
+    jobber(all_expt_config)
+    
+    
