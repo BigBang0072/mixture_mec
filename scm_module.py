@@ -136,7 +136,8 @@ class GaussianSCM:
         #Also generating the covariance for the safe keeping
         true_params=dict(
                         Si = Si,
-                        mui = x_mui
+                        mui = x_mui,
+                        Ai = Ai,
         )
         if self.debug:
             print("==================================")
