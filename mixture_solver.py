@@ -9,9 +9,11 @@ import pandas as pd
 from pgmpy.estimators import PC
 from causaldag import unknown_target_igsp
 import causaldag as cd
-from causaldag.utils.ci_tests import gauss_ci_suffstat, gauss_ci_test, MemoizedCI_Tester
-from causaldag.utils.invariance_tests import gauss_invariance_suffstat, gauss_invariance_test, MemoizedInvarianceTester
+from causaldag import partial_correlation_suffstat, partial_correlation_test, MemoizedCI_Tester
+from causaldag import gauss_invariance_suffstat, gauss_invariance_test, MemoizedInvarianceTester
 
+
+from scm_module import *
 
 class GaussianMixtureSolver():
     '''
@@ -108,13 +110,13 @@ class GaussianMixtureSolver():
         code taken from UTGSP tutorial
         '''
         sample_per_comp = num_samples//len(intv_args_dict.keys())
-        num_nodes = intv_args_dict[comp]["true_params"]["mui"].shape[0]
+        num_nodes = intv_args_dict["obs"]["true_params"]["mui"].shape[0]
 
         #Generating the observational samples
         obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
         obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
-        obs_samples = np.random.multivariate_normal(est_mui,
-                                                est_Si,
+        obs_samples = np.random.multivariate_normal(obs_true_mui,
+                                                obs_true_Si,
                                                 size=sample_per_comp)
 
 
@@ -126,6 +128,7 @@ class GaussianMixtureSolver():
             if comp=="obs":
                 continue
             actual_target_list.append(comp)
+            # pdb.set_trace()
 
             est_mui = intv_args_dict[comp]["est_params"]["mui"]
             est_Si = intv_args_dict[comp]["est_params"]["Si"]
@@ -137,13 +140,13 @@ class GaussianMixtureSolver():
             utarget_sample_list.append(intv_samples)
         
         #Creating the suddicient statistics
-        obs_suffstat = gauss_ci_suffstat(obs_samples)
+        obs_suffstat = partial_correlation_suffstat(obs_samples)
         invariance_suffstat = gauss_invariance_suffstat(obs_samples, 
                                                         utarget_sample_list)
         #CI tester and invariance tester
         alpha = 1e-3
         alpha_inv = 1e-3
-        ci_tester = MemoizedCI_Tester(gauss_ci_test, 
+        ci_tester = MemoizedCI_Tester(partial_correlation_test, 
                                         obs_suffstat, alpha=alpha)
         invariance_tester = MemoizedInvarianceTester(
                                         gauss_invariance_test,
@@ -151,11 +154,89 @@ class GaussianMixtureSolver():
                                         alpha=alpha_inv)
         
         #Runnng UGSP
-        setting_list = [dict(known_interventions=[]) for _ in len(actual_target_list)]
+        setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
         est_dag, est_targets_list = unknown_target_igsp(setting_list, 
                                                 num_nodes, 
                                                 ci_tester, 
                                                 invariance_tester)
-        print(est_targets_list)
+        #Adding the estimated targets to the acutal targets dct
+        for act_tgt,est_tgt in zip(actual_target_list,est_targets_list):
+            intv_args_dict[act_tgt]["est_tgt"]=set(est_tgt)
+        
+        
+        return est_dag,intv_args_dict
 
-        return est_dag,est_targets_list
+def run_mixture_disentangle(args):
+    '''
+    '''
+    #Collecting the metrics to evaluate the results later
+    metric_dict={}
+
+    #Creating the SCM
+    gargs={}
+    gargs["noise_mean_list"]=[args["obs_noise_mean"],]*args["num_nodes"]
+    gargs["noise_sigma_list"]=[args["obs_noise_var"],]*args["num_nodes"]
+    scmGen = RandomSCMGenerator(num_nodes=args["num_nodes"],
+                                  max_strength=args["max_edge_strength"],
+                                  num_parents=args["num_parents"],
+    )
+    gSCM = scmGen.generate_gaussian_scm(scm_args=gargs)
+    
+    
+    #Step 0: Generating the samples and interventions configs
+    print("Generating mixture samples!")
+    intv_args_dict,mixture_samples = gSCM.generate_gaussian_mixture(
+                                                        args["intv_targets"],
+                                                        args["new_noise_mean"],
+                                                        args["mix_samples"])
+
+    #Step 1: Running the disentanglement
+    print("Step 1: Disentangling Mixture")
+    gSolver = GaussianMixtureSolver(gSCM)
+    err,intv_args_dict = gSolver.mixture_disentangler(intv_args_dict,mixture_samples)
+    metric_dict["param_est_rel_err"]=err
+    print("error:",err)
+    
+
+
+
+
+
+    #Step 2: Finding the graph for each component
+    print("Stage 2: Estimating individual graph using PC")
+    # gSolver.run_pc_over_each_component(intv_args_dict,args["pc_samples"])
+    est_dag,intv_args_dict = gSolver.identify_intervention_utigsp(
+                                        intv_args_dict,args["pc_samples"])
+    metric_dict["est_dag"]=est_dag
+
+    print("Estimated Target List")
+    for comp in intv_args_dict.keys():
+        if comp=="obs":
+            continue 
+        
+        print("actual_tgt:{}\testimated_tgt:{}".format(
+                                        int(comp),
+                                        intv_args_dict[comp]["est_tgt"])
+        )
+    
+
+    #Next we have to run some evaluations
+    return intv_args_dict,metric_dict
+
+
+
+if __name__=="__main__":
+    num_nodes = 5
+    num_samples = 12800
+    args = dict(
+            num_nodes = num_nodes,
+            obs_noise_mean = 0.5,
+            obs_noise_var = 1.0,
+            max_edge_strength = 10,
+            num_parents = 2,
+            intv_targets = list(range(num_nodes)),
+            new_noise_mean = 10.0,
+            mix_samples=num_samples,
+            pc_samples =num_samples,
+    )
+    intv_args_dict = run_mixture_disentangle(args)

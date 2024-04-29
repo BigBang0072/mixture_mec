@@ -15,12 +15,17 @@ class RandomSCMGenerator():
         self.max_strength = max_strength
         self.num_parents = num_parents
 
-    def generate_random_adj_mat(self,tol=1e-1):
+    def generate_random_adj_mat(self,tol=None):
         '''
         This function will return random graph controlling the following parameters:
         1. strength of connections
         2. sparsity of connection
         '''
+        #So right now the tolerange strategy will be 10% of the max strength
+        if tol==None:
+            tol =self.max_strength/10
+         
+
         #Generating the edges with a particular strength
         A = np.array([np.random.choice([
                                 np.random.uniform(-self.max_strength,-tol),
@@ -190,7 +195,6 @@ class GaussianSCM:
         mixture_samples = np.concatenate(mixture_samples,axis=0)
 
         return intv_args_dict,mixture_samples
-
 
 if __name__=="__main__":
     args={}
