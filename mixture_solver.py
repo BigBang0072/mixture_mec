@@ -4,6 +4,7 @@ from sklearn.mixture import GaussianMixture
 from pprint import pprint
 import pdb
 import pandas as pd
+import json
 
 
 from pgmpy.estimators import PC
@@ -161,7 +162,7 @@ class GaussianMixtureSolver():
                                                 invariance_tester)
         #Adding the estimated targets to the acutal targets dct
         for act_tgt,est_tgt in zip(actual_target_list,est_targets_list):
-            intv_args_dict[act_tgt]["est_tgt"]=set(est_tgt)
+            intv_args_dict[act_tgt]["est_tgt"]=list(est_tgt)
         
         
         return est_dag,intv_args_dict
@@ -209,6 +210,9 @@ def run_mixture_disentangle(args):
                                         intv_args_dict,args["pc_samples"])
     metric_dict["est_dag"]=est_dag
 
+
+    #Evaluation: 
+    print("==========================")
     print("Estimated Target List")
     for comp in intv_args_dict.keys():
         if comp=="obs":
@@ -219,16 +223,88 @@ def run_mixture_disentangle(args):
                                         intv_args_dict[comp]["est_tgt"])
         )
     
+    #Computing the SHD
+    print("==========================")
+    metric_dict=compute_shd(intv_args_dict,metric_dict)
+    print("SHD:",metric_dict["shd"])
+    print("actgraph:\n",metric_dict["act_dag"])
+    print("est graph:\n",metric_dict["est_dag"])
 
-    #Next we have to run some evaluations
+    #Dumping the experiment
+    pickle_experiment_result_json(args,intv_args_dict,metric_dict)
     return intv_args_dict,metric_dict
+
+
+def compute_shd(intv_args_dict,metric_dict):
+    '''
+    Assumption: the graph returned by utgsp is a dag (I think it is true
+    from the code)
+    '''
+    #First of all we have to create a DAG object as per the causaldag
+    obs_A = intv_args_dict["obs"]["true_params"]["Ai"]
+    # print(obs_A)
+    num_nodes = obs_A.shape[0]
+    #Creating the actual DAG 
+    act_dag = cd.DAG()
+    act_dag.add_nodes_from([idx for idx in range(num_nodes)])
+    #Adding the edges
+    for tidx in range(num_nodes):
+        for fidx in range(0,tidx):
+            # print("tidx:{}\tfidx:{}\tval:{}".format(tidx,fidx,obs_A[fidx][tidx]))
+            if abs(obs_A[tidx][fidx])>0:
+                # print("Adding the edge:{}-->{}",fidx,tidx)
+                act_dag.add_arc(fidx,tidx)
+    metric_dict["act_dag"]=act_dag
+
+    #Computing the shd with est dag
+    est_dag = metric_dict["est_dag"]
+    shd = est_dag.shd(act_dag)
+    metric_dict["shd"]=shd
+
+    return metric_dict
+
+
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj,cd.DAG):
+            #Converting the DAG objects to adjmatrix 
+            #BEWARE, this adj matrix is in different form 
+            #(so use DAG.from_amat to recover graph)
+            return dict(
+                        amat=obj.to_amat()[0].tolist(),
+                        nodes=obj.to_amat()[1],
+            )
+        return super(NpEncoder, self).default(obj)
+
+def pickle_experiment_result_json(expt_args,intv_args_dict,metric_dict):
+    '''
+    '''
+    #Now we are ready to save the results
+    experiment_dict = dict(
+                        expt_args=expt_args,
+                        intv_args_dict=intv_args_dict,
+                        metric_dict=metric_dict
+    )
+
+    write_fname = "expt_logs/exp_{}.json".format(expt_args["exp_name"])
+    print("Writing the results to: ",write_fname)
+    with open(write_fname,"w") as whandle:
+        json.dump(experiment_dict,whandle,cls=NpEncoder,indent=4)
 
 
 
 if __name__=="__main__":
-    num_nodes = 5
+    exp_name="1"
+    num_nodes = 4
     num_samples = 12800
     args = dict(
+            exp_name=exp_name,
             num_nodes = num_nodes,
             obs_noise_mean = 0.5,
             obs_noise_var = 1.0,
@@ -239,4 +315,4 @@ if __name__=="__main__":
             mix_samples=num_samples,
             pc_samples =num_samples,
     )
-    intv_args_dict = run_mixture_disentangle(args)
+    intv_args_dict,metric_dict = run_mixture_disentangle(args)
