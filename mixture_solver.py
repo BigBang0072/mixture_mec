@@ -132,8 +132,10 @@ class GaussianMixtureSolver():
         utarget_sample_list  = []
         for comp in intv_args_dict.keys():
             #Skipping the obs
+            #I think we should not skip this, this could also be an unknown component
             if comp=="obs":
                 continue
+            
             actual_target_list.append(comp)
             # pdb.set_trace()
 
@@ -399,11 +401,11 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,6,8],
+        num_nodes = [6],
         max_edge_strength = [1.0,],
-        graph_sparsity_method=["num_parents",],#[or use num_parents]
-        num_parents = [2],
-        adj_dense_prop = [None],#[np.linspace(0,1,5)],
+        graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
+        num_parents = [None],
+        adj_dense_prop = [0.0,0.1,0.4,0.8,0.9,0.92,0.96,1.0],
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
@@ -415,7 +417,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="expt_logs_30.04.24-test"
+    save_dir="expt_logs_30.04.24-sp1"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
