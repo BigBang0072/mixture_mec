@@ -133,8 +133,8 @@ class GaussianMixtureSolver():
         for comp in intv_args_dict.keys():
             #Skipping the obs
             #I think we should not skip this, this could also be an unknown component
-            if comp=="obs":
-                continue
+            # if comp=="obs":
+            #     continue
             
             actual_target_list.append(comp)
             # pdb.set_trace()
@@ -287,16 +287,19 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict):
     right now.
     '''
     similarity_list = []
-    for comp in intv_args_dict.keys():
-        if comp=="obs":
-            continue 
-        
+    for comp in intv_args_dict.keys():    
         #Computing the similarity for each component
-        actual_tgt = set([int(comp)])
+        if comp=="obs":
+            actual_tgt=set([])
+        else:
+            actual_tgt = set([int(comp)])
         est_tgt = set(intv_args_dict[comp]["est_tgt"])
 
-        js = len(est_tgt.intersection(actual_tgt))\
-                    /len(est_tgt.union(actual_tgt))
+        if comp=="obs" and len(est_tgt.union(actual_tgt))==0:
+            js=1.0
+        else:
+            js = len(est_tgt.intersection(actual_tgt))\
+                        /len(est_tgt.union(actual_tgt))
         similarity_list.append(js)
     
     avg_js = np.mean(similarity_list)
@@ -401,7 +404,7 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [6],
+        num_nodes = [6,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -417,7 +420,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="expt_logs_30.04.24-sp1"
+    save_dir="expt_logs_30.04.24-allunk"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
