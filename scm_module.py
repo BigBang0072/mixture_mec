@@ -166,7 +166,9 @@ class GaussianSCM:
 
         return X,true_params
     
-    def generate_gaussian_mixture(self,intv_targets,new_noise_mean,num_samples):
+    def generate_gaussian_mixture(self,intv_type,intv_targets,new_noise_mean,
+                                    new_noise_sigma,num_samples,
+        ):
         '''
         '''
         #Genetaing the samples from each of the mixture
@@ -179,9 +181,10 @@ class GaussianSCM:
         for nidx in intv_targets:
             #Creating the interv args
             intv_args=dict(
-                        intv_type="do",
+                        intv_type=intv_type,
                         inode=nidx,
                         new_mui=new_noise_mean, #need not keep it different
+                        new_sigmai=new_noise_sigma,
             )
             #Generating the samples for this internvetions
             X,true_params = self._generate_sample_with_atomic_intervention(
