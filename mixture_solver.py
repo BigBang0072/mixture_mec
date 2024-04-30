@@ -40,10 +40,10 @@ class GaussianMixtureSolver():
             for cidx,comp in enumerate(comp_perm):
                 mean_err = np.sum(
                     np.abs(mean_list[cidx]-intv_args_dict[comp]["true_params"]["mui"])
-                )/np.sum(np.abs(intv_args_dict[comp]["true_params"]["mui"])+1e-7)
+                )#/np.sum(np.abs(intv_args_dict[comp]["true_params"]["mui"])+1e-7)
                 cov_error = np.sum(
                     np.abs(cov_list[cidx]-intv_args_dict[comp]["true_params"]["Si"])
-                )/np.sum(np.abs(intv_args_dict[comp]["true_params"]["Si"])+1e-7)
+                )#/np.sum(np.abs(intv_args_dict[comp]["true_params"]["Si"])+1e-7)
                 
                 
                 err+=mean_err+cov_error
@@ -169,6 +169,8 @@ class GaussianMixtureSolver():
         
         return est_dag,intv_args_dict
 
+
+#SINGLE EXPERIMENT KERNEL
 def run_mixture_disentangle(args):
     '''
     '''
@@ -292,7 +294,6 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict):
     metric_dict["avg_js"]=avg_js
     return metric_dict
 
-
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
@@ -330,7 +331,7 @@ def pickle_experiment_result_json(expt_args,intv_args_dict,metric_dict):
         json.dump(experiment_dict,whandle,cls=NpEncoder,indent=4)
 
 
-
+#PARLLEL EXPERIMENT RUNNER
 def jobber(all_expt_config,save_dir,num_parallel_calls):
     '''
     '''
@@ -386,21 +387,21 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
 if __name__=="__main__":
     # Graphs Related Parameters
     all_expt_config = dict(
-        run_list = [0,1,2,4,5], #for random runs with same config, needed?
-        num_nodes = [4,6,8],
-        max_edge_strength = [20,30],
+        run_list = list(range(10)), #for random runs with same config, needed?
+        num_nodes = [9,10,11],
+        max_edge_strength = [1.0,],
         num_parents = [2],
-        obs_noise_mean = [0.5],
+        obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
-        new_noise_mean=[15.0,20.0,],
+        new_noise_mean=[1.0,],
         intv_targets = ["all"],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,18)],
     )
 
 
-    save_dir="expt_logs_29.04.24-2"
+    save_dir="expt_logs_29.04.24-12"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     

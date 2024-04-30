@@ -23,7 +23,7 @@ class RandomSCMGenerator():
         '''
         #So right now the tolerange strategy will be 10% of the max strength
         if tol==None:
-            tol =self.max_strength/10
+            tol =self.max_strength/2
          
 
         #Generating the edges with a particular strength
