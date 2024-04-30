@@ -5,6 +5,8 @@ from pprint import pprint
 import pdb
 import pandas as pd
 import json
+import pathlib
+import multiprocessing as mp
 
 
 from pgmpy.estimators import PC
@@ -319,14 +321,17 @@ def pickle_experiment_result_json(expt_args,intv_args_dict,metric_dict):
                         metric_dict=metric_dict
     )
 
-    write_fname = "expt_logs/exp_{}.json".format(expt_args["exp_name"])
+    write_fname = "{}/exp_{}.json".format(
+                                    expt_args["save_dir"],
+                                    expt_args["exp_name"]
+    )
     print("Writing the results to: ",write_fname)
     with open(write_fname,"w") as whandle:
         json.dump(experiment_dict,whandle,cls=NpEncoder,indent=4)
 
 
 
-def jobber(all_expt_config):
+def jobber(all_expt_config,save_dir,num_parallel_calls):
     '''
     '''
     #First of all we have to generate all possible experiments
@@ -341,12 +346,14 @@ def jobber(all_expt_config):
     #Now generating all the experimetns arg
     all_expt_args = []
 
+    expt_args_list = []
     for cidx,config in enumerate(problem_configs):
         config_dict = {
             key:val for key,val in zip(flatten_args_key,config)
         }
 
         args = dict(
+                save_dir=save_dir,
                 exp_name="{}".format(cidx),
                 num_nodes = config_dict["num_nodes"],
                 obs_noise_mean = config_dict["obs_noise_mean"],
@@ -361,30 +368,40 @@ def jobber(all_expt_config):
             args["intv_targets"]=list(range(config_dict["num_nodes"]))
         else:
             raise NotImplementedError
+        expt_args_list.append(args)
         
-        #Running the experiment serially first
-        intv_args_dict,metric_dict = run_mixture_disentangle(args)
-        print("=================================================")
-        print("\n\n\n\n\n\n")
+        
+        #If we want to run sequentially    
+        # intv_args_dict,metric_dict = run_mixture_disentangle(args)
+        # print("=================================================")
+        # print("\n\n\n\n\n\n")
+    
+    #Running the experiment parallely
+    with mp.Pool(num_parallel_calls) as p:
+        p.map(run_mixture_disentangle,expt_args_list)
+    print("Completed the whole experiment!")
 
     
 
 if __name__=="__main__":
     # Graphs Related Parameters
     all_expt_config = dict(
-        run_list = [0,1,2], #for random runs with same config, needed?
-        num_nodes = [10],
-        max_edge_strength = [10],
+        run_list = [0,1,2,4,5], #for random runs with same config, needed?
+        num_nodes = [4,6,8],
+        max_edge_strength = [20,30],
         num_parents = [2],
         obs_noise_mean = [0.5],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
-        new_noise_mean=[10.0],
+        new_noise_mean=[15.0,20.0,],
         intv_targets = ["all"],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,18)],
     )
 
-    jobber(all_expt_config)
+
+    save_dir="expt_logs_29.04.24-2"
+    pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
+    jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
     
