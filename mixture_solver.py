@@ -64,11 +64,14 @@ class GaussianMixtureSolver():
 
         return min_err,min_perm,intv_args_dict
 
-    def mixture_disentangler(self,intv_args_dict,mixture_samples,debug=False):
+    def mixture_disentangler(self,intv_args_dict,mixture_samples,tol,debug=False):
         #Now we are ready run the mini disentanglement algos
-        gm = GaussianMixture(n_components=len(intv_args_dict),random_state=0).fit(
-                                                    mixture_samples
-        )#None number of component not allowed!
+        gm = GaussianMixture(n_components=len(intv_args_dict),
+                                    tol=tol,
+                                    random_state=0,
+
+        ).fit(mixture_samples)
+        #None number of component not allowed!
         
         if debug:
             print("==================================")
@@ -101,6 +104,7 @@ class GaussianMixtureSolver():
 
             #Now we will run the CI test
             pc = PC(samples)
+            #Check significance level (fisher transform CI test)
             pdag = pc.skeleton_to_pdag(*pc.build_skeleton(ci_test='pearsonr'))
             intv_args_dict[comp]["est_pdag"] = pdag
             # pdb.set_trace()
@@ -198,7 +202,9 @@ def run_mixture_disentangle(args):
     #Step 1: Running the disentanglement
     print("Step 1: Disentangling Mixture")
     gSolver = GaussianMixtureSolver(gSCM)
-    err,intv_args_dict = gSolver.mixture_disentangler(intv_args_dict,mixture_samples)
+    err,intv_args_dict = gSolver.mixture_disentangler(intv_args_dict,
+                                                        mixture_samples,
+                                                        args["gmm_tol"])
     metric_dict["param_est_rel_err"]=err
     print("error:",err)
     
@@ -364,6 +370,7 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
                 new_noise_mean = config_dict["new_noise_mean"],
                 mix_samples = config_dict["sample_size"],
                 stage2_samples = config_dict["sample_size"],
+                gmm_tol=config_dict["gmm_tol"],
         )
         if config_dict["intv_targets"]=="all":
             args["intv_targets"]=list(range(config_dict["num_nodes"]))
@@ -388,7 +395,7 @@ if __name__=="__main__":
     # Graphs Related Parameters
     all_expt_config = dict(
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [9,10,11],
+        num_nodes = [9,10,11,12],
         max_edge_strength = [1.0,],
         num_parents = [2],
         obs_noise_mean = [0.0],
@@ -398,10 +405,11 @@ if __name__=="__main__":
         intv_targets = ["all"],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,18)],
+        gmm_tol = [10000,5000,1000], #1e-3 default
     )
 
 
-    save_dir="expt_logs_29.04.24-12"
+    save_dir="expt_logs_29.04.24-tol"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
