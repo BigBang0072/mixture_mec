@@ -373,7 +373,7 @@ if __name__=="__main__":
     # Graphs Related Parameters
     all_expt_config = dict(
         run_list = [0,1,2], #for random runs with same config, needed?
-        num_nodes = [4,8],
+        num_nodes = [10],
         max_edge_strength = [10],
         num_parents = [2],
         obs_noise_mean = [0.5],
