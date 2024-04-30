@@ -188,6 +188,7 @@ def run_mixture_disentangle(args):
     scmGen = RandomSCMGenerator(num_nodes=args["num_nodes"],
                                   max_strength=args["max_edge_strength"],
                                   num_parents=args["num_parents"],
+                                  args=args,
     )
     gSCM = scmGen.generate_gaussian_scm(scm_args=gargs)
     
@@ -366,6 +367,8 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
                 obs_noise_mean = config_dict["obs_noise_mean"],
                 obs_noise_var = config_dict["obs_noise_var"],
                 max_edge_strength = config_dict["max_edge_strength"],
+                graph_sparsity_method = config_dict["graph_sparsity_method"],
+                adj_dense_prop = config_dict["adj_dense_prop"],
                 num_parents = config_dict["num_parents"],
                 new_noise_mean = config_dict["new_noise_mean"],
                 mix_samples = config_dict["sample_size"],
@@ -394,10 +397,13 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
 if __name__=="__main__":
     # Graphs Related Parameters
     all_expt_config = dict(
+        #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [9,10,11,12],
+        num_nodes = [4,6,8],
         max_edge_strength = [1.0,],
+        graph_sparsity_method=["num_parents",],#[or use num_parents]
         num_parents = [2],
+        adj_dense_prop = [None],#[np.linspace(0,1,5)],
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
@@ -405,11 +411,11 @@ if __name__=="__main__":
         intv_targets = ["all"],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,18)],
-        gmm_tol = [10000,5000,1000], #1e-3 default
+        gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="expt_logs_29.04.24-tol"
+    save_dir="expt_logs_30.04.24-test"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     

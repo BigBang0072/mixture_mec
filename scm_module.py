@@ -6,7 +6,7 @@ from pprint import pprint
 class RandomSCMGenerator():
     '''
     '''
-    def __init__(self,num_nodes,max_strength,num_parents,):
+    def __init__(self,num_nodes,max_strength,num_parents,args):
         '''
         max_strength : the strenght of the parents
         num_parents  : the number of parent for each node
@@ -14,6 +14,7 @@ class RandomSCMGenerator():
         self.num_nodes = num_nodes
         self.max_strength = max_strength
         self.num_parents = num_parents
+        self.args = args #This will make rest of attribute redundant to keep
 
     def generate_random_adj_mat(self,tol=None):
         '''
@@ -36,12 +37,24 @@ class RandomSCMGenerator():
         A = np.tril(A,-1)
 
         #Next we will ensure number of parents is within max limits
-        for nidx in range(self.num_nodes):
-            mask = np.array([1,]*self.num_parents + [0,]*(nidx-self.num_parents))
-            np.random.shuffle(mask)
-            mask_vec = np.zeros(self.num_nodes)
-            mask_vec[0:mask.shape[0]]=mask
-            A[nidx,:]=A[nidx,:]*mask_vec
+        if self.args["graph_sparsity_method"]=="num_parents":
+            for nidx in range(self.num_nodes):
+                mask = np.array([1,]*self.num_parents + [0,]*(nidx-self.num_parents))
+                np.random.shuffle(mask)
+                mask_vec = np.zeros(self.num_nodes)
+                mask_vec[0:mask.shape[0]]=mask
+                A[nidx,:]=A[nidx,:]*mask_vec
+        elif self.args["graph_sparsity_method"]=="adj_dense_prop":
+            #First of all we need to generate the mask to based on the prop
+            prob_keep = self.args["adj_dense_prop"]
+            mask = np.random.choice([0,1],
+                                    size=(self.num_nodes,self.num_nodes),
+                                    replace=True,
+                                    p=[1-prob_keep,prob_keep]
+            )
+            A = np.multiply(A,mask)
+        else:
+            raise NotImplementedError
         
         assert np.sum(np.diag(A))==0.0,"Diagnoal non zero"
         
