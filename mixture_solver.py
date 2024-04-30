@@ -427,7 +427,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="expt_logs_30.04.24-spallunk"
+    save_dir="all_expt_logs/expt_logs_30.04.24-spallunk"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
