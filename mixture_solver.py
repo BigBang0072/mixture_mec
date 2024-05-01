@@ -438,7 +438,7 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,6,8],
+        num_nodes = [6,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -446,7 +446,7 @@ if __name__=="__main__":
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
-        new_noise_mean= [1.0], #[1.0,2.0,4.0,10.0,],
+        new_noise_mean= [0.1,0.2,0.8,1.0,],
         intv_targets = ["all"],
         intv_type = ["do"], #hard,do,soft
         new_noise_sigma = [0.0],#[0.1,1.0,2.0,8.0],
@@ -456,7 +456,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="all_expt_logs/expt_logs_30.04.24-igsp"
+    save_dir="all_expt_logs/expt_logs_30.04.24-noise-shift-low"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
