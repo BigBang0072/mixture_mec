@@ -10,7 +10,7 @@ import multiprocessing as mp
 
 
 from pgmpy.estimators import PC
-from causaldag import unknown_target_igsp
+from causaldag import unknown_target_igsp,igsp
 import causaldag as cd
 from causaldag import partial_correlation_suffstat, partial_correlation_test, MemoizedCI_Tester
 from causaldag import gauss_invariance_suffstat, gauss_invariance_test, MemoizedInvarianceTester
@@ -125,19 +125,30 @@ class GaussianMixtureSolver():
         obs_samples = np.random.multivariate_normal(obs_true_mui,
                                                 obs_true_Si,
                                                 size=sample_per_comp)
+        #Generating the samples from the estimated params
+        obs_est_mui = intv_args_dict["obs"]["est_params"]["mui"]
+        obs_est_Si = intv_args_dict["obs"]["est_params"]["Si"]
+        obs_est_samples = np.random.multivariate_normal(obs_est_mui,
+                                                obs_est_Si,
+                                                size=sample_per_comp)
+        
+        
 
 
-        #Iterating over all the estimated component and
-        actual_target_list = []
-        utarget_sample_list  = []
+        #Iterating over all the estimated component but first adding the obs first
+        #This is required by the UGSP
+        actual_target_list = ["obs",]
+        utarget_sample_list  = [obs_est_samples,]
+        igsp_setting_list = [dict(interventions=[]),]
+
         for comp in intv_args_dict.keys():
-            #Skipping the obs
-            #I think we should not skip this, this could also be an unknown component
-            # if comp=="obs":
-            #     continue
-            
+            #Skipping the obs cuz already added above
+            if comp=="obs":
+                continue
             actual_target_list.append(comp)
-            # pdb.set_trace()
+            igsp_setting_list.append(dict(
+                                        interventions=[int(comp)]
+            ))
 
             est_mui = intv_args_dict[comp]["est_params"]["mui"]
             est_Si = intv_args_dict[comp]["est_params"]["Si"]
@@ -162,18 +173,29 @@ class GaussianMixtureSolver():
                                         invariance_suffstat, 
                                         alpha=alpha_inv)
         
-        #Runnng UGSP
+        #Runnng UTGSP
         setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
+        print("Running UGSP")
         est_dag, est_targets_list = unknown_target_igsp(setting_list, 
-                                                num_nodes, 
+                                                set(list(range(num_nodes))), 
                                                 ci_tester, 
                                                 invariance_tester)
+        
+        #Running the IGSP to see the upper bound of the estimation
+        #Question: Should we put extra obs data similar to UTGSP here?
+        print("Running the IGSP")
+        igsp_est_dag = igsp(igsp_setting_list,
+                            set(list(range(num_nodes))),
+                            ci_tester, 
+                            invariance_tester,
+        )
+
         #Adding the estimated targets to the acutal targets dct
         for act_tgt,est_tgt in zip(actual_target_list,est_targets_list):
             intv_args_dict[act_tgt]["est_tgt"]=list(est_tgt)
         
         
-        return est_dag,intv_args_dict
+        return est_dag,intv_args_dict,igsp_est_dag
 
 
 #SINGLE EXPERIMENT KERNEL
@@ -222,9 +244,10 @@ def run_mixture_disentangle(args):
     #Step 2: Finding the graph for each component
     print("Stage 2: Estimating individual graph using PC")
     # gSolver.run_pc_over_each_component(intv_args_dict,args["stage2_samples"])
-    est_dag,intv_args_dict = gSolver.identify_intervention_utigsp(
+    est_dag,intv_args_dict,igsp_est_dag = gSolver.identify_intervention_utigsp(
                                         intv_args_dict,args["stage2_samples"])
     metric_dict["est_dag"]=est_dag
+    metric_dict["igsp_dag"]=igsp_est_dag
 
 
     #Evaluation: 
@@ -282,6 +305,12 @@ def compute_shd(intv_args_dict,metric_dict):
     shd = est_dag.shd(act_dag)
     metric_dict["shd"]=shd
 
+    #Computing the shd for the oracle igsp dag
+    if "igsp_dag" in metric_dict:
+        igsp_est_dag = metric_dict["igsp_dag"]
+        igsp_shd = igsp_est_dag.shd(act_dag)
+        metric_dict["igsp_shd"]=igsp_shd
+    
     return metric_dict
 
 def compute_target_jaccard_sim(intv_args_dict,metric_dict):
@@ -409,11 +438,11 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [6,],
+        num_nodes = [4,6,8],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
-        adj_dense_prop = [0.0,0.1,0.4,0.8,0.9,0.92,0.96,1.0],
+        adj_dense_prop = [0.8],
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
@@ -427,7 +456,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="all_expt_logs/expt_logs_30.04.24-spallunk"
+    save_dir="all_expt_logs/expt_logs_30.04.24-igsp"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
