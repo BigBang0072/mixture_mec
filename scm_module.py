@@ -84,7 +84,7 @@ class GaussianSCM:
             print("Generating SCM")
         #Paramters for true underlying SCM
         self.noise_mu = np.array(args["noise_mean_list"],dtype=np.float32)
-        self.noise_D = np.diag(args["noise_sigma_list"])
+        self.noise_D = np.diag(args["noise_var_list"])
         self.noise_D_list= np.diag(self.noise_D)
         self.dim = self.noise_D.shape[0]
         #This adjacency matrix is lower traingular
@@ -102,12 +102,15 @@ class GaussianSCM:
         '''
         #Generating the independent noise for each var and each sample
         standard_noise = np.random.randn(num_samples,self.dim)
-        noise = standard_noise*np.diag(noise_Di) + noise_mui
+        #TODO: Here we have to use sigma (so take sqrt once we have corrected the Di to have variance)
+        #For sigma=1 it was same but wont be same for general (done)
+        noise = standard_noise*np.sqrt(np.diag(noise_Di)) + noise_mui
         #Now we are ready to generate all the samples
         Bi = np.linalg.inv(np.eye(self.dim)-Ai)
         X = np.matmul(Bi,noise.T).T #to keep the sample x dim shape
 
         #Generating the covariance matrix to compare later
+        #noiseDi is the correct covaraince matrix of noise with varaince in diagonal no sigma
         Si = np.matmul(np.matmul(Bi,noise_Di),Bi.T)
         x_mui = np.matmul(Bi,noise_mui)
         return X,Si,x_mui
@@ -136,7 +139,7 @@ class GaussianSCM:
             Ai[intv_args["inode"],:]=0
             #Updating the noise variance for this node
             noise_Di = self.noise_D.copy()
-            noise_Di[intv_args["inode"],intv_args["inode"]]=intv_args["new_sigmai"]
+            noise_Di[intv_args["inode"],intv_args["inode"]]=intv_args["new_vari"]
             #Updating the mean of this node too
             noise_mui = self.noise_mu.copy()
             noise_mui[intv_args["inode"]]=intv_args["new_mui"]
@@ -167,7 +170,7 @@ class GaussianSCM:
         return X,true_params
     
     def generate_gaussian_mixture(self,intv_type,intv_targets,new_noise_mean,
-                                    new_noise_sigma,num_samples,
+                                    new_noise_var,num_samples,
         ):
         '''
         '''
@@ -184,7 +187,7 @@ class GaussianSCM:
                         intv_type=intv_type,
                         inode=nidx,
                         new_mui=new_noise_mean, #need not keep it different
-                        new_sigmai=new_noise_sigma,
+                        new_vari=new_noise_var,
             )
             #Generating the samples for this internvetions
             X,true_params = self._generate_sample_with_atomic_intervention(
@@ -216,7 +219,7 @@ if __name__=="__main__":
     args={}
     num_nodes=2
     args["noise_mean_list"]=[0.0,0.0]
-    args["noise_sigma_list"]=[1.0,1.0]
+    args["noise_var_list"]=[1.0,1.0]
     args["adj_mat"]=np.array([
                     [0,0],
                     [1,0]

@@ -240,7 +240,7 @@ def run_mixture_disentangle(args):
     #Creating the SCM
     gargs={}
     gargs["noise_mean_list"]=[args["obs_noise_mean"],]*args["num_nodes"]
-    gargs["noise_sigma_list"]=[args["obs_noise_var"],]*args["num_nodes"]
+    gargs["noise_var_list"]=[args["obs_noise_var"],]*args["num_nodes"]
     scmGen = RandomSCMGenerator(num_nodes=args["num_nodes"],
                                   max_strength=args["max_edge_strength"],
                                   num_parents=args["num_parents"],
@@ -255,7 +255,7 @@ def run_mixture_disentangle(args):
                                                         args["intv_type"],
                                                         args["intv_targets"],
                                                         args["new_noise_mean"],
-                                                        args["new_noise_sigma"],
+                                                        args["new_noise_var"],
                                                         args["mix_samples"],
     )
 
@@ -462,7 +462,7 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
                 stage2_samples = config_dict["sample_size"],
                 gmm_tol=config_dict["gmm_tol"],
                 intv_type=config_dict["intv_type"],
-                new_noise_sigma=config_dict["new_noise_sigma"],
+                new_noise_var=config_dict["new_noise_var"],
         )
         if config_dict["intv_targets"]=="all":
             args["intv_targets"]=list(range(config_dict["num_nodes"]))
@@ -488,7 +488,7 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [6,],
+        num_nodes = [4,6,8],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -498,15 +498,15 @@ if __name__=="__main__":
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
         intv_targets = ["all"],
-        intv_type = ["hard"], #hard,do,soft
-        new_noise_sigma = [0.1,0.2,0.5,1.0,2.0,4.0,8.0],#[0.1,1.0,2.0,8.0],
+        intv_type = ["do"], #hard,do,soft
+        new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,18)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-hard_var_shift"
+    save_dir="all_expt_logs/expt_logs_11.05.24-main_plus_oracle_donoisepert-corr"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
