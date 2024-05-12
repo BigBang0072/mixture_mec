@@ -492,7 +492,7 @@ if __name__=="__main__":
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
-        adj_dense_prop = [0.1,0.2,0.4,0.6,0.8,0.9,0.95,1.0],
+        adj_dense_prop = [0.8],
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
