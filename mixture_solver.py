@@ -488,11 +488,11 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,6,8],
+        num_nodes = [6,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
-        adj_dense_prop = [0.8],
+        adj_dense_prop = [0.1,0.2,0.4,0.6,0.8,0.9,0.95,1.0],
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
@@ -506,7 +506,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-main_plus_oracle_donoisepert-corr"
+    save_dir="all_expt_logs/expt_logs_11.05.24-sparsity_n6-corr"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
