@@ -496,17 +496,17 @@ if __name__=="__main__":
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
-        new_noise_mean= [0.1,0.2,0.5,1.0,2.0,4.0,8.0],
+        new_noise_mean= [1.0],
         intv_targets = ["all"],
-        intv_type = ["do"], #hard,do,soft
-        new_noise_var = [None],#[0.1,1.0,2.0,8.0],
+        intv_type = ["hard"], #hard,do,soft
+        new_noise_var = [0.1,0.2,0.5,1.0,2.0,4.0,8.0],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,18)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-mean_shift-corr"
+    save_dir="all_expt_logs/expt_logs_11.05.24-hard_var_shift-corr"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
