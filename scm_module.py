@@ -127,7 +127,7 @@ class GaussianSCM:
             Ai[intv_args["inode"],:]=0
             #Updating the noise variance for this node
             noise_Di = self.noise_D.copy()
-            noise_Di[intv_args["inode"],intv_args["inode"]]=0
+            noise_Di[intv_args["inode"],intv_args["inode"]]=1e-9
             #Updating the mean of this node too
             noise_mui = self.noise_mu.copy()
             noise_mui[intv_args["inode"]]=intv_args["new_mui"] #the constant it sets to
