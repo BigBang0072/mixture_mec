@@ -492,11 +492,11 @@ if __name__=="__main__":
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
-        adj_dense_prop = [0.1,0.2,0.4,0.6,0.8,0.9,0.95,1.0],
+        adj_dense_prop = [0.8],
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
-        new_noise_mean= [1.0],
+        new_noise_mean= [0.1,0.2,0.5,1.0,2.0,4.0,8.0],
         intv_targets = ["all"],
         intv_type = ["do"], #hard,do,soft
         new_noise_sigma = [0.0],#[0.1,1.0,2.0,8.0],
@@ -506,7 +506,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-sparsity_n6"
+    save_dir="all_expt_logs/expt_logs_11.05.24-mean_shift"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
