@@ -125,6 +125,12 @@ class GaussianMixtureSolver():
         obs_samples = np.random.multivariate_normal(obs_true_mui,
                                                 obs_true_Si,
                                                 size=sample_per_comp)
+        #Generating the observational samples for oracle
+        obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
+        obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
+        oracle_obs_samples = np.random.multivariate_normal(obs_true_mui,
+                                                obs_true_Si,
+                                                size=sample_per_comp)
         #Generating the samples from the estimated params
         obs_est_mui = intv_args_dict["obs"]["est_params"]["mui"]
         obs_est_Si = intv_args_dict["obs"]["est_params"]["Si"]
@@ -132,14 +138,25 @@ class GaussianMixtureSolver():
                                                 obs_est_Si,
                                                 size=sample_per_comp)
         
+        #Generating the sample from a random component other thatn obs
+        #This will test that UTGSP will not need the obs distribution
+        intv_locs = set(intv_args_dict.keys())
+        intv_locs.remove("obs")
+        intv_base_loc = np.random.choice(list(intv_locs),size=1)[0]
+        intv_base_est_mui = intv_args_dict[intv_base_loc]["est_params"]["mui"]
+        intv_base_est_Si = intv_args_dict[intv_base_loc]["est_params"]["Si"]
+        intv_est_samples = np.random.multivariate_normal(
+                                                intv_base_est_mui,
+                                                intv_base_est_Si,
+                                                size=sample_per_comp)
         
 
 
         #Iterating over all the estimated component but first adding the obs first
         #This is required by the UGSP
         actual_target_list = ["obs",]
-        utarget_sample_list  = [obs_est_samples,]
-        utarget_oracle_sample_list = [obs_samples,]
+        utarget_sample_list  = [obs_est_samples.copy(),]
+        utarget_oracle_sample_list = [oracle_obs_samples.copy(),]
         igsp_setting_list = [dict(interventions=[]),]
 
         for comp in intv_args_dict.keys():
@@ -172,16 +189,30 @@ class GaussianMixtureSolver():
         
         #Creating the suddicient statistics
         obs_suffstat = partial_correlation_suffstat(obs_samples)
+        #This is base suff stat when we dont want to use the obs as base in UTGSP
+        intv_base_suffstat = partial_correlation_suffstat(intv_est_samples)
+
+
+        #Getting the interventional suff stat
         invariance_suffstat = gauss_invariance_suffstat(obs_samples, 
                                                 utarget_sample_list)
         oracle_invariance_suffstat = gauss_invariance_suffstat(obs_samples, 
                                                 utarget_oracle_sample_list)
+        #Getting the intv suff sata with intv base instead of obs
+        intv_base_invariance_suffstat = gauss_invariance_suffstat(
+                                                intv_est_samples, 
+                                                utarget_sample_list
+        )
 
         #CI tester and invariance tester
         alpha = 1e-3
         alpha_inv = 1e-3
         ci_tester = MemoizedCI_Tester(partial_correlation_test, 
                                         obs_suffstat, alpha=alpha)
+        intv_base_ci_tester = MemoizedCI_Tester(partial_correlation_test, 
+                                        intv_base_suffstat, alpha=alpha)
+        
+        
         invariance_tester = MemoizedInvarianceTester(
                                         gauss_invariance_test,
                                         invariance_suffstat, 
@@ -189,6 +220,10 @@ class GaussianMixtureSolver():
         oracle_invariance_tester = MemoizedInvarianceTester(
                                         gauss_invariance_test,
                                         oracle_invariance_suffstat, 
+                                        alpha=alpha_inv)
+        inv_base_invariance_tester = MemoizedInvarianceTester(
+                                        gauss_invariance_test,
+                                        intv_base_invariance_suffstat, 
                                         alpha=alpha_inv)
         
         #Runnng UTGSP
@@ -206,6 +241,14 @@ class GaussianMixtureSolver():
                                                 set(list(range(num_nodes))), 
                                                 ci_tester, 
                                                 oracle_invariance_tester)
+        
+        #Running the UTGSP with different base instead of obs dist
+        setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
+        print("Running intv_base-UTGSP")
+        intv_base_est_dag, intv_base_est_targets_list = unknown_target_igsp(setting_list, 
+                                                set(list(range(num_nodes))), 
+                                                intv_base_ci_tester, 
+                                                inv_base_invariance_tester)
 
         #Running the IGSP to see the upper bound of the estimation
         #Question: Should we put extra obs data similar to UTGSP here?
@@ -226,8 +269,10 @@ class GaussianMixtureSolver():
         for act_tgt,oracle_est_tgt in zip(actual_target_list,oracle_est_targets_list):
             intv_args_dict[act_tgt]["oracle_est_tgt"]=list(oracle_est_tgt)
 
+        for act_tgt,intv_base_est_tgt in zip(actual_target_list,intv_base_est_targets_list):
+            intv_args_dict[act_tgt]["intv_base_est_tgt"]=list(intv_base_est_tgt)
         
-        return est_dag,intv_args_dict,oracle_est_dag,igsp_est_dag
+        return est_dag,intv_args_dict,oracle_est_dag,igsp_est_dag,intv_base_est_dag
 
 
 #SINGLE EXPERIMENT KERNEL
@@ -276,11 +321,13 @@ def run_mixture_disentangle(args):
     #Step 2: Finding the graph for each component
     print("Stage 2: Estimating individual graph using PC")
     # gSolver.run_pc_over_each_component(intv_args_dict,args["stage2_samples"])
-    est_dag,intv_args_dict,oracle_est_dag,igsp_est_dag = gSolver.identify_intervention_utigsp(
+    est_dag,intv_args_dict,oracle_est_dag,igsp_est_dag,intv_base_est_dag\
+                         = gSolver.identify_intervention_utigsp(
                                         intv_args_dict,args["stage2_samples"])
     metric_dict["est_dag"]=est_dag
     metric_dict["oracle_est_dag"]=oracle_est_dag
     metric_dict["igsp_dag"]=igsp_est_dag
+    metric_dict["intv_base_est_dag"]=intv_base_est_dag
 
 
     #Evaluation: 
@@ -288,18 +335,26 @@ def run_mixture_disentangle(args):
     print("Estimated Target List")
     for comp in intv_args_dict.keys():
         if comp=="obs":
-            continue 
-        
-        print("actual_tgt:{}\testimated_tgt:{}".format(
-                                        int(comp),
-                                        intv_args_dict[comp]["est_tgt"])
-        )
+            print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
+                                            comp,
+                                            intv_args_dict[comp]["est_tgt"],
+                                            intv_args_dict[comp]["oracle_est_tgt"]
+                                            )
+            )
+        else:
+            print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
+                                            int(comp),
+                                            intv_args_dict[comp]["est_tgt"],
+                                            intv_args_dict[comp]["oracle_est_tgt"]
+                                            )
+            )
     
     #Computing the SHD
     print("==========================")
     metric_dict=compute_shd(intv_args_dict,metric_dict)
     print("SHD:",metric_dict["shd"])
     print("Oracle-SHD:",metric_dict["oracle_shd"])
+    print("Intv Base-SHD:",metric_dict["intv_base_shd"])
     print("actgraph:\n",metric_dict["act_dag"])
     print("est graph:\n",metric_dict["est_dag"])
     print("oracle est graph:\n",metric_dict["oracle_est_dag"])
@@ -309,6 +364,7 @@ def run_mixture_disentangle(args):
     metric_dict=compute_target_jaccard_sim(intv_args_dict,metric_dict)
     print("Avg JS:",metric_dict["avg_js"])
     print("Avg Oracle JS:",metric_dict["avg_oracle_js"])
+    print("Avg Intv Base JS:",metric_dict["avg_intv_base_js"])
     
     
     #Dumping the experiment
@@ -346,6 +402,11 @@ def compute_shd(intv_args_dict,metric_dict):
     oracle_shd = oracle_est_dag.shd(act_dag)
     metric_dict["oracle_shd"]=oracle_shd
 
+    #Computing the SHD for the intv_base base est dag
+    intv_base_est_dag = metric_dict["intv_base_est_dag"]
+    intv_base_shd = intv_base_est_dag.shd(act_dag)
+    metric_dict["intv_base_shd"]=intv_base_shd
+
     #Computing the shd for the oracle igsp dag
     if "igsp_dag" in metric_dict:
         igsp_est_dag = metric_dict["igsp_dag"]
@@ -361,6 +422,7 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict):
     '''
     similarity_list = []
     oracle_similarity_list = []
+    intv_base_similarity_list = []
     for comp in intv_args_dict.keys():    
         #Computing the similarity for each component
         if comp=="obs":
@@ -369,22 +431,40 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict):
             actual_tgt = set([int(comp)])
         est_tgt = set(intv_args_dict[comp]["est_tgt"])
         oracle_est_tgt = set(intv_args_dict[comp]["oracle_est_tgt"])
+        intv_base_est_tgt = set(intv_args_dict[comp]["intv_base_est_tgt"])
 
+        #Computing the est_target JS
         if comp=="obs" and len(est_tgt.union(actual_tgt))==0:
             js=1.0
-            oracle_js = 1.0
         else:
             js = len(est_tgt.intersection(actual_tgt))\
                         /len(est_tgt.union(actual_tgt))
+        
+        #Computing the oracle JS
+        if comp=="obs" and len(oracle_est_tgt.union(actual_tgt))==0:
+            oracle_js=1.0
+        else:
             oracle_js = len(oracle_est_tgt.intersection(actual_tgt))\
                         /len(oracle_est_tgt.union(actual_tgt))
+        
+        #Computing the inv base JS
+        if comp=="obs" and len(intv_base_est_tgt.union(actual_tgt))==0:
+            intv_base_js=1.0
+        else:
+            intv_base_js = len(intv_base_est_tgt.intersection(actual_tgt))\
+                        /len(intv_base_est_tgt.union(actual_tgt))
+        
         similarity_list.append(js)
         oracle_similarity_list.append(oracle_js)
-    
+        intv_base_similarity_list.append(intv_base_js)
+
     avg_js = np.mean(similarity_list)
     avg_oracle_js = np.mean(oracle_similarity_list)
+    avg_intv_base_js = np.mean(intv_base_similarity_list)
+
     metric_dict["avg_js"]=avg_js
     metric_dict["avg_oracle_js"]=avg_oracle_js
+    metric_dict["avg_intv_base_js"]=avg_intv_base_js
 
     return metric_dict
 
@@ -488,7 +568,7 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [6,],
+        num_nodes = [4,6,8],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -498,15 +578,15 @@ if __name__=="__main__":
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
         intv_targets = ["all"],
-        intv_type = ["hard"], #hard,do,soft
-        new_noise_var = [0.1,0.2,0.5,1.0,2.0,4.0,8.0],#[0.1,1.0,2.0,8.0],
+        intv_type = ["do"], #hard,do,soft
+        new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,18)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-hard_var_shift-corr"
+    save_dir="all_expt_logs/expt_logs_11.05.24-main_plus_oracle_donoisepert-corr-js"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
