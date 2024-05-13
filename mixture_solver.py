@@ -29,15 +29,20 @@ class GaussianMixtureSolver():
     def get_best_estimated_matching_error(self,intv_args_dict,gm,debug=False):
         '''
         '''
+        print("Getting the best maching of estimated params!")
         mean_list=gm.means_
         cov_list = gm.covariances_
+        est_comp_idx_list = list(range(len(mean_list)))
 
-        comp_perm_list = it.permutations(intv_args_dict.keys())
+        comp_perm_list = it.permutations(est_comp_idx_list)
+        actual_tgt_list = list(intv_args_dict.keys())
         min_err = float("inf")
         min_perm=None
         for comp_perm in comp_perm_list:
             err = 0.0
-            for cidx,comp in enumerate(comp_perm):
+            #Now we have a perm: match comp_perm --> actual_tgt_list
+            req_comp_perm = comp_perm[0:len(actual_tgt_list)]
+            for cidx,comp in zip(req_comp_perm,actual_tgt_list):
                 mean_err = np.sum(
                     np.abs(mean_list[cidx]-intv_args_dict[comp]["true_params"]["mui"])
                 )#/np.sum(np.abs(intv_args_dict[comp]["true_params"]["mui"])+1e-7)
@@ -50,23 +55,24 @@ class GaussianMixtureSolver():
             #Now checking if this perm/matching gives minimum error
             if err<min_err:
                 min_err=err 
-                min_perm=comp_perm
+                min_perm=req_comp_perm
         
         if debug:
             print("error:",min_err)
             print("min_perm:",min_perm)
         
         #Updating the interv dict with appropriate perm
-        for cidx,comp in enumerate(min_perm):
+        for cidx,comp in zip(min_perm,actual_tgt_list):
             intv_args_dict[comp]["est_params"]={}
             intv_args_dict[comp]["est_params"]["mui"] = mean_list[cidx]
             intv_args_dict[comp]["est_params"]["Si"] = cov_list[cidx]
+        print("Best Matching Done!")
 
         return min_err,min_perm,intv_args_dict
 
-    def mixture_disentangler(self,intv_args_dict,mixture_samples,tol,debug=False):
+    def mixture_disentangler(self,num_component,intv_args_dict,mixture_samples,tol,debug=False):
         #Now we are ready run the mini disentanglement algos
-        gm = GaussianMixture(n_components=len(intv_args_dict),
+        gm = GaussianMixture(n_components=num_component,
                                     tol=tol,
                                     random_state=0,
 
@@ -307,9 +313,11 @@ def run_mixture_disentangle(args):
     #Step 1: Running the disentanglement
     print("Step 1: Disentangling Mixture")
     gSolver = GaussianMixtureSolver(gSCM)
-    err,intv_args_dict = gSolver.mixture_disentangler(intv_args_dict,
-                                                        mixture_samples,
-                                                        args["gmm_tol"])
+    #We will allow number of component = n+1 (hopefully it will find zero weight)
+    err,intv_args_dict = gSolver.mixture_disentangler(args["num_nodes"]+1,
+                                                    intv_args_dict,
+                                                    mixture_samples,
+                                                    args["gmm_tol"])
     metric_dict["param_est_rel_err"]=err
     print("error:",err)
     
@@ -546,6 +554,12 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
         )
         if config_dict["intv_targets"]=="all":
             args["intv_targets"]=list(range(config_dict["num_nodes"]))
+        elif config_dict["intv_targets"]=="half":
+            #Here we will only interven on half the nodes
+            nodes_list = list(range(config_dict["num_nodes"]))
+            np.random.shuffle(nodes_list)
+            half_node_list = nodes_list[0:config_dict["num_nodes"]//2]
+            args["intv_targets"]=half_node_list
         else:
             raise NotImplementedError
         expt_args_list.append(args)
@@ -586,7 +600,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-main_plus_oracle_donoisepert-corr-js"
+    save_dir="all_expt_logs/expt_logs_11.05.24-unequal_matching"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
