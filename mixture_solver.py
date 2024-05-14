@@ -34,14 +34,18 @@ class GaussianMixtureSolver():
         cov_list = gm.covariances_
         est_comp_idx_list = list(range(len(mean_list)))
 
-        comp_perm_list = it.permutations(est_comp_idx_list)
         actual_tgt_list = list(intv_args_dict.keys())
+        comp_perm_list = it.permutations(est_comp_idx_list,
+                                        r=len(actual_tgt_list),
+        )
+        
         min_err = float("inf")
         min_perm=None
-        for comp_perm in comp_perm_list:
+        for req_comp_perm in comp_perm_list:
             err = 0.0
             #Now we have a perm: match comp_perm --> actual_tgt_list
-            req_comp_perm = comp_perm[0:len(actual_tgt_list)]
+            # req_comp_perm = comp_perm[0:len(actual_tgt_list)]
+            assert len(req_comp_perm)==len(actual_tgt_list)
             for cidx,comp in zip(req_comp_perm,actual_tgt_list):
                 mean_err = np.sum(
                     np.abs(mean_list[cidx]-intv_args_dict[comp]["true_params"]["mui"])
@@ -560,6 +564,11 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
             np.random.shuffle(nodes_list)
             half_node_list = nodes_list[0:config_dict["num_nodes"]//2]
             args["intv_targets"]=half_node_list
+        elif type(config_dict["intv_targets"])==type(1):
+            nodes_list = list(range(config_dict["num_nodes"]))
+            np.random.shuffle(nodes_list)
+            some_node_list = nodes_list[0:config_dict["intv_targets"]]
+            args["intv_targets"]=some_node_list
         else:
             raise NotImplementedError
         expt_args_list.append(args)
@@ -582,7 +591,7 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,6,8],
+        num_nodes = [12,15,20],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -591,7 +600,7 @@ if __name__=="__main__":
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["half"],
+        intv_targets = [4],
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
@@ -600,7 +609,7 @@ if __name__=="__main__":
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-half_intv"
+    save_dir="all_expt_logs/expt_logs_11.05.24-large_nodes_sparse_intv"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
