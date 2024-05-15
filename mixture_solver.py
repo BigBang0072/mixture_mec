@@ -30,6 +30,7 @@ class GaussianMixtureSolver():
         '''
         '''
         print("Getting the best maching of estimated params!")
+        weight_list = gm.weights_
         mean_list=gm.means_
         cov_list = gm.covariances_
         est_comp_idx_list = list(range(len(mean_list)))
@@ -41,8 +42,11 @@ class GaussianMixtureSolver():
         
         min_err = float("inf")
         min_perm=None
+        min_weight_precision_error = None
+        component_true_weight = 1.0/len(mean_list) #equal proportion
         for req_comp_perm in comp_perm_list:
             err = 0.0
+            weight_precision_error = 0.0
             #Now we have a perm: match comp_perm --> actual_tgt_list
             # req_comp_perm = comp_perm[0:len(actual_tgt_list)]
             assert len(req_comp_perm)==len(actual_tgt_list)
@@ -54,12 +58,16 @@ class GaussianMixtureSolver():
                     np.abs(cov_list[cidx]-intv_args_dict[comp]["true_params"]["Si"])
                 )#/np.sum(np.abs(intv_args_dict[comp]["true_params"]["Si"])+1e-7)
                 
-                
+                #Getting the accumulated error
+                weight_precision_error += np.abs(
+                    weight_list[cidx]-component_true_weight
+                )
                 err+=mean_err+cov_error
             #Now checking if this perm/matching gives minimum error
             if err<min_err:
                 min_err=err 
                 min_perm=req_comp_perm
+                min_weight_precision_error=weight_precision_error
         
         if debug:
             print("error:",min_err)
@@ -70,9 +78,23 @@ class GaussianMixtureSolver():
             intv_args_dict[comp]["est_params"]={}
             intv_args_dict[comp]["est_params"]["mui"] = mean_list[cidx]
             intv_args_dict[comp]["est_params"]["Si"] = cov_list[cidx]
+        
+        #Actually we should have rest of the component too
+        rest_perm = set(est_comp_idx_list).difference(min_perm)
+        for ridx in rest_perm:
+            #Creating new component
+            intv_args_dict["left_comp_"+str(ridx)]={}
+            #Adding the true param same as the estimated (for UTGSP oracle)
+            intv_args_dict["left_comp_"+str(ridx)]["true_params"]={}
+            intv_args_dict["left_comp_"+str(ridx)]["true_params"]["mui"]=mean_list[ridx]
+            intv_args_dict["left_comp_"+str(ridx)]["true_params"]["Si"]=cov_list[ridx]
+            #Estimated is also same (we are not computing the error so fine to keep same)
+            intv_args_dict["left_comp_"+str(ridx)]["est_params"]={}
+            intv_args_dict["left_comp_"+str(ridx)]["est_params"]["mui"]=mean_list[ridx]
+            intv_args_dict["left_comp_"+str(ridx)]["est_params"]["Si"]=cov_list[ridx]
         print("Best Matching Done!")
 
-        return min_err,min_perm,intv_args_dict
+        return min_err,min_perm,intv_args_dict,min_weight_precision_error
 
     def mixture_disentangler(self,num_component,intv_args_dict,mixture_samples,tol,debug=False):
         #Now we are ready run the mini disentanglement algos
@@ -90,10 +112,11 @@ class GaussianMixtureSolver():
             print("==================================")
             pprint("Estimated Covarainces (unmatched):")
             pprint(gm.covariances_*(gm.covariances_>1e-5))
-        min_err,min_perm,intv_args_dict = self.get_best_estimated_matching_error(
-                                                                intv_args_dict,gm)
+        min_err,min_perm,intv_args_dict,min_weight_precision_error\
+                             = self.get_best_estimated_matching_error(
+                                                intv_args_dict,gm)
 
-        return min_err,intv_args_dict
+        return min_err,intv_args_dict,min_weight_precision_error
     
     def run_pc_over_each_component(self,intv_args_dict,num_samples):
         '''
@@ -121,7 +144,7 @@ class GaussianMixtureSolver():
     
         return intv_args_dict
     
-    def identify_intervention_utigsp(self,intv_args_dict,num_samples):
+    def identify_intervention_utigsp(self,intv_args_dict,num_samples,run_igsp=False):
         '''
         They assume we have access to the observational data
         code taken from UTGSP tutorial
@@ -174,9 +197,10 @@ class GaussianMixtureSolver():
             if comp=="obs":
                 continue
             actual_target_list.append(comp)
-            igsp_setting_list.append(dict(
-                                        interventions=[int(comp)]
-            ))
+            if run_igsp:
+                igsp_setting_list.append(dict(
+                                            interventions=[int(comp)]
+                ))
 
             #Generating the samples from the estimated parameters
             est_mui = intv_args_dict[comp]["est_params"]["mui"]
@@ -262,12 +286,15 @@ class GaussianMixtureSolver():
 
         #Running the IGSP to see the upper bound of the estimation
         #Question: Should we put extra obs data similar to UTGSP here?
-        print("Running the IGSP")
-        igsp_est_dag = igsp(igsp_setting_list,
-                            set(list(range(num_nodes))),
-                            ci_tester, 
-                            invariance_tester,
-        )
+        if run_igsp:
+            print("Running the IGSP")
+            igsp_est_dag = igsp(igsp_setting_list,
+                                set(list(range(num_nodes))),
+                                ci_tester, 
+                                invariance_tester,
+            )
+        else:
+            igsp_est_dag=None
 
         #Here we are not matching the target using the similarty but 
         #rather than the parameter which is already done in the step1
@@ -318,12 +345,14 @@ def run_mixture_disentangle(args):
     print("Step 1: Disentangling Mixture")
     gSolver = GaussianMixtureSolver(gSCM)
     #We will allow number of component = n+1 (hopefully it will find zero weight)
-    err,intv_args_dict = gSolver.mixture_disentangler(args["num_nodes"]+1,
+    err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(args["num_nodes"]+1,
                                                     intv_args_dict,
                                                     mixture_samples,
                                                     args["gmm_tol"])
     metric_dict["param_est_rel_err"]=err
+    metric_dict["weight_precision_error"]=weight_precision_error
     print("error:",err)
+    print("weight precision error:",metric_dict["weight_precision_error"])
     
 
 
@@ -346,20 +375,12 @@ def run_mixture_disentangle(args):
     print("==========================")
     print("Estimated Target List")
     for comp in intv_args_dict.keys():
-        if comp=="obs":
-            print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
-                                            comp,
-                                            intv_args_dict[comp]["est_tgt"],
-                                            intv_args_dict[comp]["oracle_est_tgt"]
-                                            )
-            )
-        else:
-            print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
-                                            int(comp),
-                                            intv_args_dict[comp]["est_tgt"],
-                                            intv_args_dict[comp]["oracle_est_tgt"]
-                                            )
-            )
+        print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
+                                        comp,
+                                        intv_args_dict[comp]["est_tgt"],
+                                        intv_args_dict[comp]["oracle_est_tgt"]
+                                        )
+        )
     
     #Computing the SHD
     print("==========================")
@@ -420,7 +441,7 @@ def compute_shd(intv_args_dict,metric_dict):
     metric_dict["intv_base_shd"]=intv_base_shd
 
     #Computing the shd for the oracle igsp dag
-    if "igsp_dag" in metric_dict:
+    if "igsp_dag" in metric_dict and metric_dict["igsp_dag"]!=None:
         igsp_est_dag = metric_dict["igsp_dag"]
         igsp_shd = igsp_est_dag.shd(act_dag)
         metric_dict["igsp_shd"]=igsp_shd
@@ -435,7 +456,11 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict):
     similarity_list = []
     oracle_similarity_list = []
     intv_base_similarity_list = []
-    for comp in intv_args_dict.keys():    
+    for comp in intv_args_dict.keys():
+        #We will skip if the componet is the left out one
+        if "left" in comp:
+            continue
+
         #Computing the similarity for each component
         if comp=="obs":
             actual_tgt=set([])
@@ -591,7 +616,7 @@ if __name__=="__main__":
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [12,15,20],
+        num_nodes = [4,6,8],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -600,16 +625,16 @@ if __name__=="__main__":
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = [4],
+        intv_targets = ["all"],
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
-        sample_size = [2**idx for idx in range(10,18)],
+        sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-large_nodes_sparse_intv"
+    save_dir="all_expt_logs/expt_logs_11.05.24-all_intv_weight_error_all_comp_utigsp_large_sample"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
