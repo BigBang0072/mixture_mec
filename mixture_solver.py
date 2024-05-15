@@ -96,14 +96,30 @@ class GaussianMixtureSolver():
 
         return min_err,min_perm,intv_args_dict,min_weight_precision_error
 
-    def mixture_disentangler(self,num_component,intv_args_dict,mixture_samples,tol,debug=False):
+    def mixture_disentangler(self,max_component,intv_args_dict,mixture_samples,tol,debug=False):
         #Now we are ready run the mini disentanglement algos
-        gm = GaussianMixture(n_components=num_component,
-                                    tol=tol,
-                                    random_state=0,
+        num_comp_gm_list = []
+        log_prob_list = []
+        max_log_prob = -1*float("inf")
+        max_gm=None
+        max_comp=None
+        for num_component in range(1,max_component+1):
+            gm = GaussianMixture(n_components=num_component,
+                                        tol=tol,
+                                        random_state=0,
 
-        ).fit(mixture_samples)
-        #None number of component not allowed!
+            ).fit(mixture_samples)
+            #None number of component not allowed!
+            log_prob = gm.lower_bound_
+            log_prob_list.append(log_prob)
+            if max_log_prob<log_prob:
+                max_log_prob=log_prob
+                max_gm = gm
+                max_comp=num_component
+        print("num comp selected:",max_comp)
+        print("log prob list:",log_prob_list)
+        # pdb.set_trace()
+        gm = max_gm
         
         if debug:
             print("==================================")
@@ -345,7 +361,8 @@ def run_mixture_disentangle(args):
     print("Step 1: Disentangling Mixture")
     gSolver = GaussianMixtureSolver(gSCM)
     #We will allow number of component = n+1 (hopefully it will find zero weight)
-    err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(args["num_nodes"]+1,
+    err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(
+                                                    args["num_nodes"]+1,
                                                     intv_args_dict,
                                                     mixture_samples,
                                                     args["gmm_tol"])
@@ -615,8 +632,8 @@ if __name__=="__main__":
     # Graphs Related Parameters
     all_expt_config = dict(
         #Graph related parameters
-        run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,6,8],
+        run_list = list(range(1)), #for random runs with same config, needed?
+        num_nodes = [8,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -629,12 +646,12 @@ if __name__=="__main__":
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
-        sample_size = [2**idx for idx in range(10,21)],
+        sample_size = [2**idx for idx in range(10,11)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-all_intv_weight_error_all_comp_utigsp_large_sample"
+    save_dir="all_expt_logs/expt_logs_11.05.24-kselect_test"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
     
