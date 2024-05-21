@@ -98,11 +98,9 @@ class GaussianMixtureSolver():
 
     def mixture_disentangler(self,max_component,intv_args_dict,mixture_samples,tol,debug=False):
         #Now we are ready run the mini disentanglement algos
-        num_comp_gm_list = []
+        num_comp_gm_dict = {}
         log_prob_list = []
         max_log_prob = -1*float("inf")
-        max_gm=None
-        max_comp=None
         for num_component in range(1,max_component+1):
             gm = GaussianMixture(n_components=num_component,
                                         tol=tol,
@@ -112,14 +110,19 @@ class GaussianMixtureSolver():
             #None number of component not allowed!
             log_prob = gm.lower_bound_
             log_prob_list.append(log_prob)
+            num_comp_gm_dict[num_component] = gm
             if max_log_prob<log_prob:
                 max_log_prob=log_prob
-                max_gm = gm
-                max_comp=num_component
-        print("num comp selected:",max_comp)
+        
         print("log prob list:",log_prob_list)
-        # pdb.set_trace()
-        gm = max_gm
+        #Now we will select the max one
+        max_comp = max_component
+        for midx in range(0,len(log_prob_list)):
+            if (max_log_prob-log_prob_list[midx])<1:
+                max_comp=midx+1 # to get into natural number
+                break
+        print("num comp selected:",max_comp)
+        gm = num_comp_gm_dict[max_comp]
         
         if debug:
             print("==================================")
@@ -642,7 +645,7 @@ if __name__=="__main__":
         obs_noise_var = [1.0],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["all"],
+        intv_targets = ["half"],
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
