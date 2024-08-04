@@ -270,8 +270,8 @@ class GaussianMixtureSolver():
             alpha = 1e-3
             alpha_inv = 1e-3
         elif self.dtype=="sachs":
-            alpha = 5e-3
-            alpha_inv = 5e-3
+            alpha = 1e-3
+            alpha_inv = 1e-3
         else:
             raise NotImplementedError()
         ci_tester = MemoizedCI_Tester(partial_correlation_test, 
@@ -696,14 +696,14 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_lofs_sachs-1"
+    save_dir = "all_expt_logs/expt_lofs_sachs-2"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
     dataset_path="datasets/sachs_yuhaow.csv"
-    all_sample_size_factor = list(range(7,8))
+    all_sample_size_factor = [0.5,1.0,2.0,4.0,7.0]
     gmm_tol=1e-3
-    run_list = range(1)
+    run_list = range(4)
     
 
 
@@ -714,7 +714,7 @@ def run_sachs_experiments():
             counter+=1
             config_dict=dict(
                 gmm_tol = gmm_tol,
-                sample_size = 600*sfactor
+                sample_size = int(600*sfactor)
             )
             args = dict(
                         save_dir=save_dir,
