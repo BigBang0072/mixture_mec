@@ -1,6 +1,7 @@
 import numpy as np
 import pdb
 from pprint import pprint
+import pandas as pd
 
 
 class RandomSCMGenerator():
@@ -233,6 +234,7 @@ def generate_mixture_sachs(fpath,num_samples):
     idx2var_dict = {val:key for key,val in var2idx_dict.items()}
     #Getting the adjacecny matrix for this dataset
     A = get_sachs_adj_matrix(var2idx_dict)
+    num_nodes = A.shape[0]
     
     #We will keep the net number of sample same so that the number of component doesnt have any effect
     num_samples = num_samples//(len(intv_targets)+1)
@@ -244,8 +246,8 @@ def generate_mixture_sachs(fpath,num_samples):
     obs_samples = df[(df["experiment"]==1) | (df["experiment"]==2)
                         ].drop(columns=["experiment"])[0:num_samples].to_numpy()
     mixture_samples.append(obs_samples)
-    intv_args["obs"]["samples"]=obs_samples
-    intv_args["obs"]["true_params"]=dict(
+    intv_args_dict["obs"]["samples"]=obs_samples
+    intv_args_dict["obs"]["true_params"]=dict(
                         Si = np.cov(obs_samples,rowvar=False),
                         mui = np.mean(obs_samples,axis=0),
                         Ai = A,
@@ -278,32 +280,32 @@ def generate_mixture_sachs(fpath,num_samples):
     mixture_samples = np.concatenate(mixture_samples,axis=0)
     print("Total number of samples: ",mixture_samples.shape[0])
 
-    return intv_args_dict,mixture_samples
+    return intv_args_dict,mixture_samples,num_nodes
 
 def get_sachs_adj_matrix(var2idx_dict):
     '''
     '''
     num_nodes = len(var2idx_dict)
-    A = np.zeros(num_nodes,num_nodes)
+    A = np.zeros((num_nodes,num_nodes))
     #Now adding the edges
     A[var2idx_dict["Akt"],var2idx_dict["PKA"]]=1.0
     A[var2idx_dict["Erk"],var2idx_dict["PKA"]]=1.0
     A[var2idx_dict["Mek"],var2idx_dict["PKA"]]=1.0
     A[var2idx_dict["Raf"],var2idx_dict["PKA"]]=1.0
-    A[var2idx_dict["Jnk"],var2idx_dict["PKA"]]=1.0
-    A[var2idx_dict["P38"],var2idx_dict["PKA"]]=1.0
+    A[var2idx_dict["JNK"],var2idx_dict["PKA"]]=1.0
+    A[var2idx_dict["p38"],var2idx_dict["PKA"]]=1.0
     A[var2idx_dict["Akt"],var2idx_dict["PIP3"]]=1.0
     A[var2idx_dict["PIP2"],var2idx_dict["PIP3"]]=1.0
-    A[var2idx_dict["Plcg"],var2idx_dict["PIP3"]]=1.0
+    A[var2idx_dict["PLCg"],var2idx_dict["PIP3"]]=1.0
     A[var2idx_dict["PKC"],var2idx_dict["PIP2"]]=1.0
-    A[var2idx_dict["PIP2"],var2idx_dict["Plcg"]]=1.0
-    A[var2idx_dict["PKC"],var2idx_dict["Plcg"]]=1.0
+    A[var2idx_dict["PIP2"],var2idx_dict["PLCg"]]=1.0
+    A[var2idx_dict["PKC"],var2idx_dict["PLCg"]]=1.0
     A[var2idx_dict["Erk"],var2idx_dict["Mek"]]=1.0
     A[var2idx_dict["Mek"],var2idx_dict["Raf"]]=1.0
     A[var2idx_dict["Mek"],var2idx_dict["PKC"]]=1.0
     A[var2idx_dict["Raf"],var2idx_dict["PKC"]]=1.0
-    A[var2idx_dict["Jnk"],var2idx_dict["PKC"]]=1.0
-    A[var2idx_dict["P38"],var2idx_dict["PKC"]]=1.0
+    A[var2idx_dict["JNK"],var2idx_dict["PKC"]]=1.0
+    A[var2idx_dict["p38"],var2idx_dict["PKC"]]=1.0
 
     return A 
 

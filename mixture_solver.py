@@ -7,6 +7,7 @@ import pandas as pd
 import json
 import pathlib
 import multiprocessing as mp
+import pandas as pd
 
 
 from pgmpy.estimators import PC
@@ -21,10 +22,9 @@ from scm_module import *
 class GaussianMixtureSolver():
     '''
     '''
-    def __init__(self,true_gSCM,dtype):
+    def __init__(self,dtype):
         '''
         '''
-        self.true_gSCM = true_gSCM
         self.dtype = dtype
 
     def get_best_estimated_matching_error(self,intv_args_dict,gm,debug=False):
@@ -377,18 +377,20 @@ def run_mixture_disentangle(args):
     elif args["dtype"]=="sachs":
         #Getting the samples and the intervention configs
         print("Generating the mixture sample")
-        intv_args_dict,mixture_samples = generate_mixture_sachs(
+        intv_args_dict,mixture_samples,num_nodes = generate_mixture_sachs(
                                             args["dataset_path"],
                                             args["mix_samples"],
         )
+        args["num_nodes"]=num_nodes
     else:
         raise NotImplementedError()
 
     #Step 1: Running the disentanglement
     print("Step 1: Disentangling Mixture")
-    gSolver = GaussianMixtureSolver(gSCM,args["dtype"])
+    gSolver = GaussianMixtureSolver(args["dtype"])
     #We will allow number of component = n+1 (hopefully it will find zero weight)
-    err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(args["num_nodes"]+1,
+    err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(
+                                                    args["num_nodes"]+1,
                                                     intv_args_dict,
                                                     mixture_samples,
                                                     args["gmm_tol"])
@@ -437,7 +439,7 @@ def run_mixture_disentangle(args):
 
     #Computing the js of target
     print("==========================")
-    metric_dict=compute_target_jaccard_sim(intv_args_dict,metric_dict)
+    metric_dict=compute_target_jaccard_sim(intv_args_dict,metric_dict,args["dtype"])
     print("Avg JS:",metric_dict["avg_js"])
     print("Avg Oracle JS:",metric_dict["avg_oracle_js"])
     print("Avg Intv Base JS:",metric_dict["avg_intv_base_js"])
@@ -491,7 +493,7 @@ def compute_shd(intv_args_dict,metric_dict):
     
     return metric_dict
 
-def compute_target_jaccard_sim(intv_args_dict,metric_dict):
+def compute_target_jaccard_sim(intv_args_dict,metric_dict,dtype):
     '''
     #Assumption: This assumes that the component is atomic
     right now.
@@ -507,8 +509,12 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict):
         #Computing the similarity for each component
         if comp=="obs":
             actual_tgt=set([])
-        else:
+        elif dtype=="simulation":
             actual_tgt = set([int(comp)])
+        elif dtype=="sachs":
+            actual_tgt = set([int(intv_args_dict[comp]["tgt_idx"])])
+        else:
+            raise NotImplementedError()
         est_tgt = set(intv_args_dict[comp]["est_tgt"])
         oracle_est_tgt = set(intv_args_dict[comp]["oracle_est_tgt"])
         intv_base_est_tgt = set(intv_args_dict[comp]["intv_base_est_tgt"])
@@ -585,7 +591,7 @@ def pickle_experiment_result_json(expt_args,intv_args_dict,metric_dict):
         json.dump(experiment_dict,whandle,cls=NpEncoder,indent=4)
 
 
-#PARLLEL EXPERIMENT RUNNER
+#PARLLEL EXPERIMENT RUNNER (SIMULATION)
 def jobber(all_expt_config,save_dir,num_parallel_calls):
     '''
     '''
@@ -623,6 +629,7 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
                 gmm_tol=config_dict["gmm_tol"],
                 intv_type=config_dict["intv_type"],
                 new_noise_var=config_dict["new_noise_var"],
+                dtype="simulation"
         )
         if config_dict["intv_targets"]=="all":
             args["intv_targets"]=list(range(config_dict["num_nodes"]))
@@ -652,9 +659,9 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
         p.map(run_mixture_disentangle,expt_args_list)
     print("Completed the whole experiment!")
 
-    
-
-if __name__=="__main__":
+def run_simulation_experiments():
+    '''
+    '''
     # Graphs Related Parameters
     all_expt_config = dict(
         #Graph related parameters
@@ -680,5 +687,67 @@ if __name__=="__main__":
     save_dir="all_expt_logs/expt_logs_11.05.24-all_intv_weight_error_all_comp_utigsp_large_sample"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
+
+
+
+#SACHS Dataset
+def run_sachs_experiments():
+    '''
+    '''
+    num_parallel_calls=64
+    #Setting up the save directory
+    save_dir = "all_expt_logs/expt_lofs_sachs-1"
+    pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
+
+    #Setting up the dataset path and other parameters
+    dataset_path="datasets/sachs_yuhaow.csv"
+    all_sample_size_factor = list(range(7,8))
+    gmm_tol=1e-3
+    run_list = range(1)
+    
+
+
+    expt_args_list=[]
+    counter=0
+    for run_num in run_list:
+        for sfactor in all_sample_size_factor:
+            counter+=1
+            config_dict=dict(
+                gmm_tol = gmm_tol,
+                sample_size = 600*sfactor
+            )
+            args = dict(
+                        save_dir=save_dir,
+                        dataset_path=dataset_path,
+                        exp_name="{}".format(counter),
+                        # num_nodes = config_dict["num_nodes"],
+                        # obs_noise_mean = config_dict["obs_noise_mean"],
+                        # obs_noise_var = config_dict["obs_noise_var"],
+                        # max_edge_strength = config_dict["max_edge_strength"],
+                        # graph_sparsity_method = config_dict["graph_sparsity_method"],
+                        # adj_dense_prop = config_dict["adj_dense_prop"],
+                        # num_parents = config_dict["num_parents"],
+                        # new_noise_mean = config_dict["new_noise_mean"],
+                        mix_samples = config_dict["sample_size"],
+                        stage2_samples = config_dict["sample_size"],
+                        gmm_tol=config_dict["gmm_tol"],
+                        # intv_type=config_dict["intv_type"],
+                        # new_noise_var=config_dict["new_noise_var"],
+                        dtype="sachs"
+            )
+            expt_args_list.append(args)
+    
+    with mp.Pool(num_parallel_calls) as p:
+        p.map(run_mixture_disentangle,expt_args_list)
+    print("Completed the whole experiment!")
+
+if __name__=="__main__":
+    #If we want to run the simulation experiments then we will open this
+    # run_simulation_experiments()
+
+    #If we want to run the resutls on the SACHS dataset
+    run_sachs_experiments()
+
+    
     
     
