@@ -51,6 +51,8 @@ class GaussianMixtureSolver():
             # req_comp_perm = comp_perm[0:len(actual_tgt_list)]
             assert len(req_comp_perm)==len(actual_tgt_list)
             for cidx,comp in zip(req_comp_perm,actual_tgt_list):
+                #So we will only add the error of the matched component
+                #The error in the rest of the components are thrown away
                 mean_err = np.sum(
                     np.abs(mean_list[cidx]-intv_args_dict[comp]["true_params"]["mui"])
                 )#/np.sum(np.abs(intv_args_dict[comp]["true_params"]["mui"])+1e-7)
