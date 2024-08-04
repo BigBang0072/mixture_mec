@@ -21,10 +21,11 @@ from scm_module import *
 class GaussianMixtureSolver():
     '''
     '''
-    def __init__(self,true_gSCM):
+    def __init__(self,true_gSCM,dtype):
         '''
         '''
         self.true_gSCM = true_gSCM
+        self.dtype = dtype
 
     def get_best_estimated_matching_error(self,intv_args_dict,gm,debug=False):
         '''
@@ -114,8 +115,11 @@ class GaussianMixtureSolver():
             print("==================================")
             pprint("Estimated Covarainces (unmatched):")
             pprint(gm.covariances_*(gm.covariances_>1e-5))
-        min_err,min_perm,intv_args_dict,min_weight_precision_error\
-                             = self.get_best_estimated_matching_error(
+        
+        min_err,min_perm,min_weight_precision_error = None,None,None
+        if self.dtype=="simulation" or self.dtype=="sachs":
+            min_err,min_perm,intv_args_dict,min_weight_precision_error\
+                                = self.get_best_estimated_matching_error(
                                                 intv_args_dict,gm)
 
         return min_err,intv_args_dict,min_weight_precision_error
@@ -160,12 +164,19 @@ class GaussianMixtureSolver():
         obs_samples = np.random.multivariate_normal(obs_true_mui,
                                                 obs_true_Si,
                                                 size=sample_per_comp)
+        
         #Generating the observational samples for oracle
-        obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
-        obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
-        oracle_obs_samples = np.random.multivariate_normal(obs_true_mui,
-                                                obs_true_Si,
-                                                size=sample_per_comp)
+        if self.dtype=="simulation":
+            obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
+            obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
+            oracle_obs_samples = np.random.multivariate_normal(obs_true_mui,
+                                                    obs_true_Si,
+                                                    size=sample_per_comp)
+        elif self.dtype=="sachs":
+            oracle_obs_samples=intv_args_dict["obs"]["samples"][0:sample_per_comp,:]
+        else:
+            raise NotImplementedError()
+        
         #Generating the samples from the estimated params
         obs_est_mui = intv_args_dict["obs"]["est_params"]["mui"]
         obs_est_Si = intv_args_dict["obs"]["est_params"]["Si"]
@@ -200,9 +211,17 @@ class GaussianMixtureSolver():
                 continue
             actual_target_list.append(comp)
             if run_igsp:
-                igsp_setting_list.append(dict(
-                                            interventions=[int(comp)]
-                ))
+                if self.dtype=="simulation":
+                    igsp_setting_list.append(dict(
+                                                interventions=[int(comp)]
+                    ))
+                elif self.dtype=="sachs":
+                    igsp_setting_list.append(dict(
+                                    interventions=[
+                                        int(intv_args_dict[comp][tgt_idx])]
+                    ))
+                else:
+                    raise NotImplementedError()
 
             #Generating the samples from the estimated parameters
             est_mui = intv_args_dict[comp]["est_params"]["mui"]
@@ -216,12 +235,18 @@ class GaussianMixtureSolver():
 
 
             #Genearting the samples for the oracle using the exact parameters
-            oracle_mui = intv_args_dict[comp]["true_params"]["mui"]
-            oracle_Si = intv_args_dict[comp]["true_params"]["Si"]
-            oracle_intv_samples = np.random.multivariate_normal(oracle_mui,
-                                                    oracle_Si,
-                                                    size=sample_per_comp)
-            utarget_oracle_sample_list.append(oracle_intv_samples)
+            if self.dtype=="simulation" or "left_comp_" in comp:
+                oracle_mui = intv_args_dict[comp]["true_params"]["mui"]
+                oracle_Si = intv_args_dict[comp]["true_params"]["Si"]
+                oracle_intv_samples = np.random.multivariate_normal(oracle_mui,
+                                                        oracle_Si,
+                                                        size=sample_per_comp)
+                utarget_oracle_sample_list.append(oracle_intv_samples)
+            elif self.dtype=="sachs":
+                oracle_intv_samples = intv_args_dict[comp]["samples"][0:sample_per_comp,:]
+                utarget_oracle_sample_list.append(oracle_intv_samples)
+            else:
+                raise NotImplementedError()
         
         #Creating the suddicient statistics
         obs_suffstat = partial_correlation_suffstat(obs_samples)
@@ -241,8 +266,14 @@ class GaussianMixtureSolver():
         )
 
         #CI tester and invariance tester
-        alpha = 1e-3
-        alpha_inv = 1e-3
+        if self.dtype=="simulation":
+            alpha = 1e-3
+            alpha_inv = 1e-3
+        elif self.dtype=="sachs":
+            alpha = 5e-3
+            alpha_inv = 5e-3
+        else:
+            raise NotImplementedError()
         ci_tester = MemoizedCI_Tester(partial_correlation_test, 
                                         obs_suffstat, alpha=alpha)
         intv_base_ci_tester = MemoizedCI_Tester(partial_correlation_test, 
@@ -264,7 +295,7 @@ class GaussianMixtureSolver():
         
         #Runnng UTGSP
         setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
-        print("Running UGSP")
+        print("Running UTGSP")
         est_dag, est_targets_list = unknown_target_igsp(setting_list, 
                                                 set(list(range(num_nodes))), 
                                                 ci_tester, 
@@ -321,31 +352,41 @@ def run_mixture_disentangle(args):
     #Collecting the metrics to evaluate the results later
     metric_dict={}
 
-    #Creating the SCM
-    gargs={}
-    gargs["noise_mean_list"]=[args["obs_noise_mean"],]*args["num_nodes"]
-    gargs["noise_var_list"]=[args["obs_noise_var"],]*args["num_nodes"]
-    scmGen = RandomSCMGenerator(num_nodes=args["num_nodes"],
-                                  max_strength=args["max_edge_strength"],
-                                  num_parents=args["num_parents"],
-                                  args=args,
-    )
-    gSCM = scmGen.generate_gaussian_scm(scm_args=gargs)
-    
-    
-    #Step 0: Generating the samples and interventions configs
-    print("Generating mixture samples!")
-    intv_args_dict,mixture_samples = gSCM.generate_gaussian_mixture(
-                                                        args["intv_type"],
-                                                        args["intv_targets"],
-                                                        args["new_noise_mean"],
-                                                        args["new_noise_var"],
-                                                        args["mix_samples"],
-    )
+    if args["dtype"]=="simulation":
+        #Creating the SCM
+        gargs={}
+        gargs["noise_mean_list"]=[args["obs_noise_mean"],]*args["num_nodes"]
+        gargs["noise_var_list"]=[args["obs_noise_var"],]*args["num_nodes"]
+        scmGen = RandomSCMGenerator(num_nodes=args["num_nodes"],
+                                    max_strength=args["max_edge_strength"],
+                                    num_parents=args["num_parents"],
+                                    args=args,
+        )
+        gSCM = scmGen.generate_gaussian_scm(scm_args=gargs)
+        
+        
+        #Step 0: Generating the samples and interventions configs
+        print("Generating mixture samples!")
+        intv_args_dict,mixture_samples = gSCM.generate_gaussian_mixture(
+                                                            args["intv_type"],
+                                                            args["intv_targets"],
+                                                            args["new_noise_mean"],
+                                                            args["new_noise_var"],
+                                                            args["mix_samples"],
+        )
+    elif args["dtype"]=="sachs":
+        #Getting the samples and the intervention configs
+        print("Generating the mixture sample")
+        intv_args_dict,mixture_samples = generate_mixture_sachs(
+                                            args["dataset_path"],
+                                            args["mix_samples"],
+        )
+    else:
+        raise NotImplementedError()
 
     #Step 1: Running the disentanglement
     print("Step 1: Disentangling Mixture")
-    gSolver = GaussianMixtureSolver(gSCM)
+    gSolver = GaussianMixtureSolver(gSCM,args["dtype"])
     #We will allow number of component = n+1 (hopefully it will find zero weight)
     err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(args["num_nodes"]+1,
                                                     intv_args_dict,
