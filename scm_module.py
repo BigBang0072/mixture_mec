@@ -178,7 +178,8 @@ class GaussianSCM:
             assert intv_args["intv_type"]=="do" or intv_args["intv_type"]=="obs",\
                             "Other internvetion type not supported"
             noise_Di = np.ones(self.noise_D.shape)
-            noise_Di[intv_args["inode"],intv_args["inode"]]=self.post_do_var
+            if intv_args["intv_type"]=="do":
+                noise_Di[intv_args["inode"],intv_args["inode"]]=self.post_do_var
             X,Si,x_mui = self._generate_sample_gamma_noise(num_samples=num_samples,
                             Ai=Ai,
                             noise_Di=noise_Di,

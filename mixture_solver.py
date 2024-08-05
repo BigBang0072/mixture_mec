@@ -599,6 +599,11 @@ class NpEncoder(json.JSONEncoder):
 def pickle_experiment_result_json(expt_args,intv_args_dict,metric_dict):
     '''
     '''
+    #First of all we will remove any samples from this
+    comp_list = intv_args_dict.keys()
+    for comp in comp_list:
+        del intv_args_dict[comp]["samples"]
+
     #Now we are ready to save the results
     experiment_dict = dict(
                         expt_args=expt_args,
@@ -692,8 +697,8 @@ def run_simulation_experiments():
     # Graphs Related Parameters
     all_expt_config = dict(
         #Graph related parameters
-        run_list = list(range(1)), #for random runs with same config, needed?
-        num_nodes = [4,],
+        run_list = list(range(4)), #for random runs with same config, needed?
+        num_nodes = [4,8],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -708,12 +713,12 @@ def run_simulation_experiments():
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
-        sample_size = [2**20],#[2**idx for idx in range(10,21)],
+        sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_temp"
+    save_dir="all_expt_logs/expt_logs_sim_gamma48"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
