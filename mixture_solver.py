@@ -463,7 +463,7 @@ def compute_shd(intv_args_dict,metric_dict):
     act_dag.add_nodes_from([idx for idx in range(num_nodes)])
     #Adding the edges
     for tidx in range(num_nodes):
-        for fidx in range(0,tidx):
+        for fidx in range(0,num_nodes):
             # print("tidx:{}\tfidx:{}\tval:{}".format(tidx,fidx,obs_A[fidx][tidx]))
             if abs(obs_A[tidx][fidx])>0:
                 # print("Adding the edge:{}-->{}",fidx,tidx)
@@ -696,13 +696,13 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_lofs_sachs-2"
+    save_dir = "all_expt_logs/expt_lofs_sachs-4"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
     dataset_path="datasets/sachs_yuhaow.csv"
-    all_sample_size_factor = [0.5,1.0,2.0,4.0,7.0]
-    gmm_tol=1e-3
+    all_sample_size_factor = range(1,8)
+    gmm_tol=100
     run_list = range(4)
     
 
@@ -737,6 +737,7 @@ def run_sachs_experiments():
             )
             expt_args_list.append(args)
     
+    # run_mixture_disentangle(expt_args_list[0])
     with mp.Pool(num_parallel_calls) as p:
         p.map(run_mixture_disentangle,expt_args_list)
     print("Completed the whole experiment!")
