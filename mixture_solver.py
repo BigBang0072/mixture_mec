@@ -150,7 +150,7 @@ class GaussianMixtureSolver():
     
         return intv_args_dict
     
-    def identify_intervention_utigsp(self,intv_args_dict,num_samples,run_igsp=False):
+    def identify_intervention_utigsp(self,intv_args_dict,num_samples,run_igsp=True):
         '''
         They assume we have access to the observational data
         code taken from UTGSP tutorial
@@ -204,13 +204,14 @@ class GaussianMixtureSolver():
         utarget_sample_list  = [obs_est_samples.copy(),]
         utarget_oracle_sample_list = [oracle_obs_samples.copy(),]
         igsp_setting_list = [dict(interventions=[]),]
+        igsp_sample_list = [oracle_obs_samples.copy(),]
 
         for comp in intv_args_dict.keys():
             #Skipping the obs cuz already added above
             if comp=="obs":
                 continue
             actual_target_list.append(comp)
-            if run_igsp:
+            if run_igsp and "left_comp" not in comp:
                 if self.dtype=="simulation":
                     igsp_setting_list.append(dict(
                                                 interventions=[int(comp)]
@@ -218,8 +219,11 @@ class GaussianMixtureSolver():
                 elif self.dtype=="sachs":
                     igsp_setting_list.append(dict(
                                     interventions=[
-                                        int(intv_args_dict[comp][tgt_idx])]
+                                        int(intv_args_dict[comp]["tgt_idx"])]
                     ))
+                    #Adding the sample
+                    igsp_intv_samples = intv_args_dict[comp]["samples"][0:sample_per_comp,:]
+                    igsp_sample_list.append(igsp_intv_samples)
                 else:
                     raise NotImplementedError()
 
@@ -250,6 +254,8 @@ class GaussianMixtureSolver():
         
         #Creating the suddicient statistics
         obs_suffstat = partial_correlation_suffstat(obs_samples)
+        #This is obs suff stat for the oracle
+        oracle_obs_suffstat = partial_correlation_suffstat(oracle_obs_samples)
         #This is base suff stat when we dont want to use the obs as base in UTGSP
         intv_base_suffstat = partial_correlation_suffstat(intv_est_samples)
 
@@ -257,12 +263,17 @@ class GaussianMixtureSolver():
         #Getting the interventional suff stat
         invariance_suffstat = gauss_invariance_suffstat(obs_samples, 
                                                 utarget_sample_list)
-        oracle_invariance_suffstat = gauss_invariance_suffstat(obs_samples, 
+        oracle_invariance_suffstat = gauss_invariance_suffstat(oracle_obs_samples, 
                                                 utarget_oracle_sample_list)
         #Getting the intv suff sata with intv base instead of obs
         intv_base_invariance_suffstat = gauss_invariance_suffstat(
                                                 intv_est_samples, 
                                                 utarget_sample_list
+        )
+        #Getting intv suff stat for the igsp
+        igsp_invariance_suffstat = gauss_invariance_suffstat(
+                                                intv_est_samples, 
+                                                igsp_sample_list
         )
 
         #CI tester and invariance tester
@@ -276,6 +287,8 @@ class GaussianMixtureSolver():
             raise NotImplementedError()
         ci_tester = MemoizedCI_Tester(partial_correlation_test, 
                                         obs_suffstat, alpha=alpha)
+        oracle_ci_tester = MemoizedCI_Tester(partial_correlation_test, 
+                                        oracle_obs_suffstat, alpha=alpha)
         intv_base_ci_tester = MemoizedCI_Tester(partial_correlation_test, 
                                         intv_base_suffstat, alpha=alpha)
         
@@ -292,6 +305,10 @@ class GaussianMixtureSolver():
                                         gauss_invariance_test,
                                         intv_base_invariance_suffstat, 
                                         alpha=alpha_inv)
+        igsp_invariance_tester = MemoizedInvarianceTester(
+                                        gauss_invariance_test,
+                                        igsp_invariance_suffstat, 
+                                        alpha=alpha_inv)
         
         #Runnng UTGSP
         setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
@@ -306,7 +323,7 @@ class GaussianMixtureSolver():
         print("Running Oracle-UTGSP")
         oracle_est_dag, oracle_est_targets_list = unknown_target_igsp(setting_list, 
                                                 set(list(range(num_nodes))), 
-                                                ci_tester, 
+                                                oracle_ci_tester, 
                                                 oracle_invariance_tester)
         
         #Running the UTGSP with different base instead of obs dist
@@ -323,8 +340,8 @@ class GaussianMixtureSolver():
             print("Running the IGSP")
             igsp_est_dag = igsp(igsp_setting_list,
                                 set(list(range(num_nodes))),
-                                ci_tester, 
-                                invariance_tester,
+                                oracle_ci_tester, 
+                                igsp_invariance_tester,
             )
         else:
             igsp_est_dag=None
@@ -390,7 +407,7 @@ def run_mixture_disentangle(args):
     gSolver = GaussianMixtureSolver(args["dtype"])
     #We will allow number of component = n+1 (hopefully it will find zero weight)
     err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(
-                                                    args["num_nodes"]+1,
+                                                    args["num_tgt_prior"],
                                                     intv_args_dict,
                                                     mixture_samples,
                                                     args["gmm_tol"])
@@ -433,9 +450,11 @@ def run_mixture_disentangle(args):
     print("SHD:",metric_dict["shd"])
     print("Oracle-SHD:",metric_dict["oracle_shd"])
     print("Intv Base-SHD:",metric_dict["intv_base_shd"])
+    print("IGSP-SHD:",metric_dict["igsp_shd"])
     print("actgraph:\n",metric_dict["act_dag"])
     print("est graph:\n",metric_dict["est_dag"])
     print("oracle est graph:\n",metric_dict["oracle_est_dag"])
+    print("igsp est graph:\n",metric_dict["igsp_dag"])
 
     #Computing the js of target
     print("==========================")
@@ -486,6 +505,7 @@ def compute_shd(intv_args_dict,metric_dict):
     metric_dict["intv_base_shd"]=intv_base_shd
 
     #Computing the shd for the oracle igsp dag
+    metric_dict["igsp_shd"]=None
     if "igsp_dag" in metric_dict and metric_dict["igsp_dag"]!=None:
         igsp_est_dag = metric_dict["igsp_dag"]
         igsp_shd = igsp_est_dag.shd(act_dag)
@@ -617,6 +637,7 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
                 save_dir=save_dir,
                 exp_name="{}".format(cidx),
                 num_nodes = config_dict["num_nodes"],
+                num_tgt_prior = config_dict["num_nodes"]+1,
                 obs_noise_mean = config_dict["obs_noise_mean"],
                 obs_noise_var = config_dict["obs_noise_var"],
                 max_edge_strength = config_dict["max_edge_strength"],
@@ -696,14 +717,15 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_lofs_sachs-4"
+    save_dir = "all_expt_logs/expt_lofs_sachs-15"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
     dataset_path="datasets/sachs_yuhaow.csv"
     all_sample_size_factor = range(1,8)
-    gmm_tol=100
-    run_list = range(4)
+    gmm_tol=1000
+    run_list = range(10)
+    num_tgt_prior=12
     
 
 
@@ -731,6 +753,7 @@ def run_sachs_experiments():
                         mix_samples = config_dict["sample_size"],
                         stage2_samples = config_dict["sample_size"],
                         gmm_tol=config_dict["gmm_tol"],
+                        num_tgt_prior=num_tgt_prior,
                         # intv_type=config_dict["intv_type"],
                         # new_noise_var=config_dict["new_noise_var"],
                         dtype="sachs"

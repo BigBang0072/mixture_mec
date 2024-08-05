@@ -244,7 +244,7 @@ def generate_mixture_sachs(fpath,num_samples):
     intv_args_dict["obs"] = {}
     intv_args_dict["obs"]["tgt_idx"]=None
     obs_samples = df[(df["experiment"]==1) | (df["experiment"]==2)
-                        ].drop(columns=["experiment"]).to_numpy()
+                        ].drop(columns=["experiment"])[0:num_samples].to_numpy()
     mixture_samples.append(obs_samples)
     intv_args_dict["obs"]["samples"]=obs_samples
     intv_args_dict["obs"]["true_params"]=dict(
