@@ -150,7 +150,7 @@ class GaussianMixtureSolver():
     
         return intv_args_dict
     
-    def identify_intervention_utigsp(self,intv_args_dict,num_samples,run_igsp=True):
+    def identify_intervention_utigsp(self,intv_args_dict,num_samples,run_igsp=False):
         '''
         They assume we have access to the observational data
         code taken from UTGSP tutorial
@@ -159,24 +159,24 @@ class GaussianMixtureSolver():
         num_nodes = intv_args_dict["obs"]["true_params"]["mui"].shape[0]
 
         #Generating the observational samples
-        obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
-        obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
-        obs_samples = np.random.multivariate_normal(obs_true_mui,
-                                                obs_true_Si,
-                                                size=sample_per_comp)
+        # obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
+        # obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
+        # obs_samples = np.random.multivariate_normal(obs_true_mui,
+        #                                         obs_true_Si,
+        #                                         size=sample_per_comp)
+        obs_samples=intv_args_dict["obs"]["samples"][0:sample_per_comp,:]
         
+
         #Generating the observational samples for oracle
-        if self.dtype=="simulation":
-            obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
-            obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
-            oracle_obs_samples = np.random.multivariate_normal(obs_true_mui,
-                                                    obs_true_Si,
-                                                    size=sample_per_comp)
-        elif self.dtype=="sachs":
-            oracle_obs_samples=intv_args_dict["obs"]["samples"][0:sample_per_comp,:]
-        else:
-            raise NotImplementedError()
+        # if self.dtype=="simulation":
+        #     obs_true_mui = intv_args_dict["obs"]["true_params"]["mui"]
+        #     obs_true_Si = intv_args_dict["obs"]["true_params"]["Si"]
+        #     oracle_obs_samples = np.random.multivariate_normal(obs_true_mui,
+        #                                             obs_true_Si,
+        #                                             size=sample_per_comp)
+        oracle_obs_samples=intv_args_dict["obs"]["samples"][0:sample_per_comp,:]
         
+
         #Generating the samples from the estimated params
         obs_est_mui = intv_args_dict["obs"]["est_params"]["mui"]
         obs_est_Si = intv_args_dict["obs"]["est_params"]["Si"]
@@ -216,6 +216,8 @@ class GaussianMixtureSolver():
                     igsp_setting_list.append(dict(
                                                 interventions=[int(comp)]
                     ))
+                    igsp_intv_samples = intv_args_dict[comp]["samples"][0:sample_per_comp,:]
+                    igsp_sample_list.append(igsp_intv_samples)
                 elif self.dtype=="sachs":
                     igsp_setting_list.append(dict(
                                     interventions=[
@@ -239,14 +241,14 @@ class GaussianMixtureSolver():
 
 
             #Genearting the samples for the oracle using the exact parameters
-            if self.dtype=="simulation" or "left_comp_" in comp:
+            if "left_comp_" in comp:
                 oracle_mui = intv_args_dict[comp]["true_params"]["mui"]
                 oracle_Si = intv_args_dict[comp]["true_params"]["Si"]
                 oracle_intv_samples = np.random.multivariate_normal(oracle_mui,
                                                         oracle_Si,
                                                         size=sample_per_comp)
                 utarget_oracle_sample_list.append(oracle_intv_samples)
-            elif self.dtype=="sachs":
+            elif self.dtype=="simulation" or self.dtype=="sachs":
                 oracle_intv_samples = intv_args_dict[comp]["samples"][0:sample_per_comp,:]
                 utarget_oracle_sample_list.append(oracle_intv_samples)
             else:
@@ -390,6 +392,8 @@ def run_mixture_disentangle(args):
                                                             args["new_noise_mean"],
                                                             args["new_noise_var"],
                                                             args["mix_samples"],
+                                                            args["noise_type"],
+                                                            args["obs_noise_gamma_shape"],
         )
     elif args["dtype"]=="sachs":
         #Getting the samples and the intervention configs
@@ -640,6 +644,8 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
                 num_tgt_prior = config_dict["num_nodes"]+1,
                 obs_noise_mean = config_dict["obs_noise_mean"],
                 obs_noise_var = config_dict["obs_noise_var"],
+                obs_noise_gamma_shape = config_dict["obs_noise_gamma_shape"],
+                noise_type = config_dict["noise_type"],
                 max_edge_strength = config_dict["max_edge_strength"],
                 graph_sparsity_method = config_dict["graph_sparsity_method"],
                 adj_dense_prop = config_dict["adj_dense_prop"],
@@ -686,26 +692,28 @@ def run_simulation_experiments():
     # Graphs Related Parameters
     all_expt_config = dict(
         #Graph related parameters
-        run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,6,8],
+        run_list = list(range(1)), #for random runs with same config, needed?
+        num_nodes = [4,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
         adj_dense_prop = [0.8],
+        noise_type=["gamma"], #"gaussian", or gamma
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
+        obs_noise_gamma_shape = [2.0],#[0.5,1.0,2.0,4.0,8.0],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
         intv_targets = ["all"],
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
-        sample_size = [2**idx for idx in range(10,21)],
+        sample_size = [2**20],#[2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
     )
 
 
-    save_dir="all_expt_logs/expt_logs_11.05.24-all_intv_weight_error_all_comp_utigsp_large_sample"
+    save_dir="all_expt_logs/expt_logs_sim_temp"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
@@ -767,10 +775,10 @@ def run_sachs_experiments():
 
 if __name__=="__main__":
     #If we want to run the simulation experiments then we will open this
-    # run_simulation_experiments()
+    run_simulation_experiments()
 
     #If we want to run the resutls on the SACHS dataset
-    run_sachs_experiments()
+    # run_sachs_experiments()
 
     
     

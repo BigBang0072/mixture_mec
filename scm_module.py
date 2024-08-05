@@ -88,6 +88,7 @@ class GaussianSCM:
         self.noise_D = np.diag(args["noise_var_list"])
         self.noise_D_list= np.diag(self.noise_D)
         self.dim = self.noise_D.shape[0]
+        self.post_do_var=1e-9
         #This adjacency matrix is lower traingular
         self.A = np.array(args["adj_mat"])
         assert np.allclose(self.A, np.tril(self.A)),"adj not lower triangluar"
@@ -116,6 +117,23 @@ class GaussianSCM:
         x_mui = np.matmul(Bi,noise_mui)
         return X,Si,x_mui
     
+    def _generate_sample_gamma_noise(self,num_samples,Ai,
+                                        noise_Di,obs_noise_gamma_shape):
+        '''
+        '''
+        #First of all sampling the noise
+        noise = np.random.gamma(obs_noise_gamma_shape,
+                                    scale=1.0,size=(num_samples,self.dim))
+        #Now we will apply the filter of internvetion using the proxy of noise D
+        Bi = np.linalg.inv(np.eye(self.dim)-Ai)
+        X = np.matmul(np.matmul(Bi,noise_Di),noise.T).T 
+
+        #Getting the corresponding mean and variance of X now
+        x_mui = np.mean(X,axis=0)
+        Si = np.cov(X,rowvar=False)
+
+        return X,Si,x_mui
+    
     def _generate_sample_with_atomic_intervention(self,num_samples,intv_args):
         '''
         interv_args: 
@@ -131,7 +149,7 @@ class GaussianSCM:
             Ai[intv_args["inode"],:]=0
             #Updating the noise variance for this node
             noise_Di = self.noise_D.copy()
-            noise_Di[intv_args["inode"],intv_args["inode"]]=1e-9
+            noise_Di[intv_args["inode"],intv_args["inode"]]=self.post_do_var
             #Updating the mean of this node too
             noise_mui = self.noise_mu.copy()
             noise_mui[intv_args["inode"]]=intv_args["new_mui"] #the constant it sets to
@@ -151,10 +169,24 @@ class GaussianSCM:
             raise NotImplementedError()
 
         #Now finally generating the sample
-        X,Si,x_mui = self._generate_sample(num_samples=num_samples,
-                                  Ai=Ai,
-                                  noise_Di=noise_Di,
-                                  noise_mui=noise_mui)
+        if intv_args["noise_type"]=="gaussian":
+            X,Si,x_mui = self._generate_sample(num_samples=num_samples,
+                                    Ai=Ai,
+                                    noise_Di=noise_Di,
+                                    noise_mui=noise_mui)
+        elif intv_args["noise_type"]=="gamma":
+            assert intv_args["intv_type"]=="do" or intv_args["intv_type"]=="obs",\
+                            "Other internvetion type not supported"
+            noise_Di = np.ones(self.noise_D.shape)
+            noise_Di[intv_args["inode"],intv_args["inode"]]=self.post_do_var
+            X,Si,x_mui = self._generate_sample_gamma_noise(num_samples=num_samples,
+                            Ai=Ai,
+                            noise_Di=noise_Di,
+                            obs_noise_gamma_shape=intv_args["obs_noise_gamma_shape"],
+            )
+        else:
+            raise NotImplementedError()
+        
         #Also generating the covariance for the safe keeping
         true_params=dict(
                         Si = Si,
@@ -172,6 +204,7 @@ class GaussianSCM:
     
     def generate_gaussian_mixture(self,intv_type,intv_targets,new_noise_mean,
                                     new_noise_var,num_samples,
+                                    noise_type,obs_noise_gamma_shape
         ):
         '''
         '''
@@ -189,6 +222,8 @@ class GaussianSCM:
                         inode=nidx,
                         new_mui=new_noise_mean, #need not keep it different
                         new_vari=new_noise_var,
+                        noise_type=noise_type,
+                        obs_noise_gamma_shape=obs_noise_gamma_shape,
             )
             #Generating the samples for this internvetions
             X,true_params = self._generate_sample_with_atomic_intervention(
@@ -199,8 +234,12 @@ class GaussianSCM:
             #Upting the true param of this dist to compare later
             intv_args["true_params"]=true_params
             intv_args_dict[str(nidx)]=intv_args
+            intv_args_dict[str(nidx)]["samples"]=X.copy()
         #Adding the observational distribution
-        intv_args=dict(intv_type="obs")
+        intv_args=dict(intv_type="obs",
+                        noise_type=noise_type,
+                        obs_noise_gamma_shape=obs_noise_gamma_shape,
+        )
         Xobs,obs_true_params = self._generate_sample_with_atomic_intervention(
                                             num_samples=num_samples,
                                             intv_args=intv_args
@@ -208,6 +247,7 @@ class GaussianSCM:
         mixture_samples.append(Xobs)
         intv_args["true_params"]=obs_true_params
         intv_args_dict["obs"]=intv_args
+        intv_args_dict["obs"]["samples"]=Xobs.copy()
 
 
 
