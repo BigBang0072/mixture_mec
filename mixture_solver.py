@@ -1,6 +1,7 @@
 import numpy as np
 import itertools as it
 from sklearn.mixture import GaussianMixture
+from sklearn.model_selection import GridSearchCV
 from pprint import pprint
 import pdb
 import pandas as pd
@@ -156,26 +157,55 @@ class GaussianMixtureSolver():
                 intv_args_dict,
                 mixture_samples,
                 tol,cutoff_drop_ratio,
-                debug=False):
-        #Here we will perform component selection
-        log_lik_list = []
-        gm_dict={}
+                debug=False,
+                bic_sel=True):
+        #Performing the mixture model selection
+        gm_score_dict=None
+        if bic_sel:
+            param_grid = {
+                "n_components": range(1,max_component+1),
+                "tol":[tol],
+                }
+            def gmm_bic_score(estimator, X):
+                """Callable to pass to GridSearchCV that will use the BIC score."""
+                # Make it negative since GridSearchCV expects a score to maximize
+                return -estimator.bic(X)
+            
+            grid_search = GridSearchCV(
+                GaussianMixture(), param_grid=param_grid, scoring=gmm_bic_score
+            )
+            grid_search.fit(mixture_samples)
+            #Getting the best estimator
+            gm = grid_search.best_estimator_
+            est_component=len(gm.weights_)
 
-        for num_component in range(1,max_component+1):
-            #Now we are ready run the mini disentanglement algos
-            gm_comp = GaussianMixture(n_components=num_component,
-                                        tol=tol,
-                                        random_state=0,
+            #Getting the score dict 
+            df = pd.DataFrame(grid_search.cv_results_)[
+                ["param_n_components", "mean_test_score"]
+            ]
+            df["mean_test_score"] = -df["mean_test_score"]
+            gm_score_dict=dict(zip(df.param_n_components,df.mean_test_score))
+        else:
+            #Here we will perform component selection
+            gm_score_dict = {}
+            log_lik_list = []
+            gm_dict={}
+            for num_component in range(1,max_component+1):
+                #Now we are ready run the mini disentanglement algos
+                gm_comp = GaussianMixture(n_components=num_component,
+                                            tol=tol,
+                                            random_state=0,
 
-            ).fit(mixture_samples)
-            log_lik_list.append(gm_comp.lower_bound_)
-            gm_dict[num_component]=gm_comp
-        #None number of component not allowed!
-        print(log_lik_list)
-        est_component = self.middle_out_component_selector(
-                            log_lik_list,
-                            cutoff_drop_ratio)
-        gm=gm_dict[est_component]
+                ).fit(mixture_samples)
+                log_lik_list.append(gm_comp.lower_bound_)
+                gm_dict[num_component]=gm_comp
+                gm_score_dict[num_component]=gm_comp.lower_bound_
+            #None number of component not allowed!
+            print(log_lik_list)
+            est_component = self.middle_out_component_selector(
+                                log_lik_list,
+                                cutoff_drop_ratio)
+            gm=gm_dict[est_component]
         print("Number of component selected: ",est_component)
 
         if debug:
@@ -192,7 +222,7 @@ class GaussianMixtureSolver():
                                 = self.get_best_estimated_matching_error(
                                                 intv_args_dict,gm)
 
-        return min_err,intv_args_dict,min_weight_precision_error,est_component,log_lik_list
+        return min_err,intv_args_dict,min_weight_precision_error,est_component,gm_score_dict
     
     def run_pc_over_each_component(self,intv_args_dict,num_samples):
         '''
@@ -487,7 +517,7 @@ def run_mixture_disentangle(args):
     print("Step 1: Disentangling Mixture")
     gSolver = GaussianMixtureSolver(args["dtype"])
     #We will allow number of component = n+1 (hopefully it will find zero weight)
-    err,intv_args_dict,weight_precision_error,est_num_comp,log_lik_list \
+    err,intv_args_dict,weight_precision_error,est_num_comp,gm_score_dict \
                                     = gSolver.mixture_disentangler(
                                                     args["num_tgt_prior"],
                                                     intv_args_dict,
@@ -498,7 +528,7 @@ def run_mixture_disentangle(args):
     metric_dict["param_est_rel_err"]=err
     metric_dict["est_num_comp"]=est_num_comp
     metric_dict["weight_precision_error"]=weight_precision_error
-    metric_dict["log_lik_list"]=log_lik_list
+    metric_dict["gm_score_dict"]=gm_score_dict
     print("error:",err)
     print("weight precision error:",metric_dict["weight_precision_error"])
     
@@ -834,7 +864,7 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_lofs_sachs-middleout_all_obs_oracle_corr"
+    save_dir = "all_expt_logs/expt_lofs_sachs-middleout_all_obs_oracle_corr_bic"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
