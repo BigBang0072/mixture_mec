@@ -34,13 +34,24 @@ class GaussianMixtureSolver():
         weight_list = gm.weights_
         mean_list=gm.means_
         cov_list = gm.covariances_
-        est_comp_idx_list = list(range(len(mean_list)))
 
+        est_comp_idx_list = list(range(len(mean_list)))
         actual_tgt_list = list(intv_args_dict.keys())
-        comp_perm_list = it.permutations(est_comp_idx_list,
-                                        r=len(actual_tgt_list),
-        )
+
+        #If the est comp is more we will make perm of est comp
+        est_more = None
+        if len(est_comp_idx_list)>len(actual_tgt_list):
+            comp_perm_list = it.permutations(est_comp_idx_list,
+                                            r=len(actual_tgt_list),
+            )
+            est_more = True
+        else:
+            comp_perm_list = it.permutations(actual_tgt_list,
+                                            r=len(est_comp_idx_list),
+            )
+            est_more=False
         
+        #Now we will start matching
         min_err = float("inf")
         min_perm=None
         min_weight_precision_error = None
@@ -50,8 +61,15 @@ class GaussianMixtureSolver():
             weight_precision_error = 0.0
             #Now we have a perm: match comp_perm --> actual_tgt_list
             # req_comp_perm = comp_perm[0:len(actual_tgt_list)]
-            assert len(req_comp_perm)==len(actual_tgt_list)
-            for cidx,comp in zip(req_comp_perm,actual_tgt_list):
+            # assert len(req_comp_perm)==len(actual_tgt_list)
+
+            #Creating the zip object to iterate
+            if est_more:
+                zip_obj =  zip(req_comp_perm,actual_tgt_list)
+            else:
+                zip_obj = zip(est_comp_idx_list,req_comp_perm)
+            
+            for cidx,comp in zip_obj:
                 #So we will only add the error of the matched component
                 #The error in the rest of the components are thrown away
                 mean_err = np.sum(
@@ -76,37 +94,86 @@ class GaussianMixtureSolver():
             print("error:",min_err)
             print("min_perm:",min_perm)
         
+        #Creating zip object to update
+        if est_more:
+            merge_zip_obj = zip(min_perm,actual_tgt_list)
+        else:
+            merge_zip_obj = zip(est_comp_idx_list,min_perm)
+
         #Updating the interv dict with appropriate perm
-        for cidx,comp in zip(min_perm,actual_tgt_list):
+        for cidx,comp in merge_zip_obj:
             intv_args_dict[comp]["est_params"]={}
             intv_args_dict[comp]["est_params"]["mui"] = mean_list[cidx]
             intv_args_dict[comp]["est_params"]["Si"] = cov_list[cidx]
         
-        #Actually we should have rest of the component too
-        rest_perm = set(est_comp_idx_list).difference(min_perm)
-        for ridx in rest_perm:
-            #Creating new component
-            intv_args_dict["left_comp_"+str(ridx)]={}
-            #Adding the true param same as the estimated (for UTGSP oracle)
-            intv_args_dict["left_comp_"+str(ridx)]["true_params"]={}
-            intv_args_dict["left_comp_"+str(ridx)]["true_params"]["mui"]=mean_list[ridx]
-            intv_args_dict["left_comp_"+str(ridx)]["true_params"]["Si"]=cov_list[ridx]
-            #Estimated is also same (we are not computing the error so fine to keep same)
-            intv_args_dict["left_comp_"+str(ridx)]["est_params"]={}
-            intv_args_dict["left_comp_"+str(ridx)]["est_params"]["mui"]=mean_list[ridx]
-            intv_args_dict["left_comp_"+str(ridx)]["est_params"]["Si"]=cov_list[ridx]
+        #WE need to add more component only if there are more componenet
+        if est_more:
+            #Actually we should have rest of the component too
+            rest_perm = set(est_comp_idx_list).difference(min_perm)
+            for ridx in rest_perm:
+                #Creating new component
+                intv_args_dict["left_comp_"+str(ridx)]={}
+                #Adding the true param same as the estimated (for UTGSP oracle)
+                intv_args_dict["left_comp_"+str(ridx)]["true_params"]={}
+                intv_args_dict["left_comp_"+str(ridx)]["true_params"]["mui"]=mean_list[ridx]
+                intv_args_dict["left_comp_"+str(ridx)]["true_params"]["Si"]=cov_list[ridx]
+                #Estimated is also same (we are not computing the error so fine to keep same)
+                intv_args_dict["left_comp_"+str(ridx)]["est_params"]={}
+                intv_args_dict["left_comp_"+str(ridx)]["est_params"]["mui"]=mean_list[ridx]
+                intv_args_dict["left_comp_"+str(ridx)]["est_params"]["Si"]=cov_list[ridx]
         print("Best Matching Done!")
 
         return min_err,min_perm,intv_args_dict,min_weight_precision_error
 
-    def mixture_disentangler(self,num_component,intv_args_dict,mixture_samples,tol,debug=False):
-        #Now we are ready run the mini disentanglement algos
-        gm = GaussianMixture(n_components=num_component,
-                                    tol=tol,
-                                    random_state=0,
+    def middle_out_component_selector(self,log_lik_list,cutoff_drop_ratio):
+        '''
+        '''
+        # print("fwd")
+        fwd_cutoff_idx = len(log_lik_list)-1
+        for idx in range(1,len(log_lik_list)):
+            if ((np.abs(log_lik_list[idx]-log_lik_list[idx-1])
+                            )/np.abs(log_lik_list[idx-1]))<cutoff_drop_ratio:
+                fwd_cutoff_idx=idx-1
+                break
+        
+        # print("back")
+        bwd_cutoff_idx = 0 
+        for idx in range(len(log_lik_list)-1,1,-1):
+            if ((np.abs(log_lik_list[idx]-log_lik_list[idx-1])
+                        )/np.abs(log_lik_list[idx]))>cutoff_drop_ratio:
+                bwd_cutoff_idx=idx
+                break
+        print("fwd_cutoff_idx: ",fwd_cutoff_idx)
+        print("bwd_cutoff_idx: ",bwd_cutoff_idx)
+        
+        num_component = int(((fwd_cutoff_idx+1)+(bwd_cutoff_idx+1))/2)
+        return num_component
 
-        ).fit(mixture_samples)
+    def mixture_disentangler(self,max_component,
+                intv_args_dict,
+                mixture_samples,
+                tol,cutoff_drop_ratio,
+                debug=False):
+        #Here we will perform component selection
+        log_lik_list = []
+        gm_dict={}
+
+        for num_component in range(1,max_component+1):
+            #Now we are ready run the mini disentanglement algos
+            gm_comp = GaussianMixture(n_components=num_component,
+                                        tol=tol,
+                                        random_state=0,
+
+            ).fit(mixture_samples)
+            log_lik_list.append(gm_comp.lower_bound_)
+            gm_dict[num_component]=gm_comp
         #None number of component not allowed!
+        print(log_lik_list)
+        est_component = self.middle_out_component_selector(
+                            log_lik_list,
+                            cutoff_drop_ratio)
+        gm=gm_dict[est_component]
+        print("Number of component selected: ",est_component)
         
         if debug:
             print("==================================")
@@ -122,7 +189,7 @@ class GaussianMixtureSolver():
                                 = self.get_best_estimated_matching_error(
                                                 intv_args_dict,gm)
 
-        return min_err,intv_args_dict,min_weight_precision_error
+        return min_err,intv_args_dict,min_weight_precision_error,est_component
     
     def run_pc_over_each_component(self,intv_args_dict,num_samples):
         '''
@@ -178,30 +245,31 @@ class GaussianMixtureSolver():
         
 
         #Generating the samples from the estimated params
-        obs_est_mui = intv_args_dict["obs"]["est_params"]["mui"]
-        obs_est_Si = intv_args_dict["obs"]["est_params"]["Si"]
-        obs_est_samples = np.random.multivariate_normal(obs_est_mui,
-                                                obs_est_Si,
-                                                size=sample_per_comp)
+        # obs_est_mui = intv_args_dict["obs"]["est_params"]["mui"]
+        # obs_est_Si = intv_args_dict["obs"]["est_params"]["Si"]
+        # obs_est_samples = np.random.multivariate_normal(obs_est_mui,
+        #                                         obs_est_Si,
+        #                                         size=sample_per_comp)
         
         #Generating the sample from a random component other thatn obs
         #This will test that UTGSP will not need the obs distribution
-        intv_locs = set(intv_args_dict.keys())
-        intv_locs.remove("obs")
-        intv_base_loc = np.random.choice(list(intv_locs),size=1)[0]
-        intv_base_est_mui = intv_args_dict[intv_base_loc]["est_params"]["mui"]
-        intv_base_est_Si = intv_args_dict[intv_base_loc]["est_params"]["Si"]
-        intv_est_samples = np.random.multivariate_normal(
-                                                intv_base_est_mui,
-                                                intv_base_est_Si,
-                                                size=sample_per_comp)
+        # intv_locs = set(intv_args_dict.keys())
+        # intv_locs.remove("obs")
+        # intv_base_loc = np.random.choice(list(intv_locs),size=1)[0]
+        # intv_base_est_mui = intv_args_dict[intv_base_loc]["est_params"]["mui"]
+        # intv_base_est_Si = intv_args_dict[intv_base_loc]["est_params"]["Si"]
+        # intv_est_samples = np.random.multivariate_normal(
+        #                                         intv_base_est_mui,
+        #                                         intv_base_est_Si,
+        #                                         size=sample_per_comp)
         
 
 
         #Iterating over all the estimated component but first adding the obs first
         #This is required by the UGSP
-        actual_target_list = ["obs",]
-        utarget_sample_list  = [obs_est_samples.copy(),]
+        est_actual_target_list = ["obs",]
+        oracle_actual_target_list = ["obs",]
+        utarget_sample_list  = [obs_samples.copy(),]
         utarget_oracle_sample_list = [oracle_obs_samples.copy(),]
         igsp_setting_list = [dict(interventions=[]),]
         igsp_sample_list = [oracle_obs_samples.copy(),]
@@ -210,7 +278,6 @@ class GaussianMixtureSolver():
             #Skipping the obs cuz already added above
             if comp=="obs":
                 continue
-            actual_target_list.append(comp)
             if run_igsp and "left_comp" not in comp:
                 if self.dtype=="simulation":
                     igsp_setting_list.append(dict(
@@ -229,14 +296,16 @@ class GaussianMixtureSolver():
                 else:
                     raise NotImplementedError()
 
-            #Generating the samples from the estimated parameters
-            est_mui = intv_args_dict[comp]["est_params"]["mui"]
-            est_Si = intv_args_dict[comp]["est_params"]["Si"]
-            #Now we will generate samples from this distribution
-            intv_samples = np.random.multivariate_normal(est_mui,
-                                                    est_Si,
-                                                    size=sample_per_comp)
-            utarget_sample_list.append(intv_samples)
+            if "est_params" in intv_args_dict[comp]:
+                est_actual_target_list.append(comp)
+                #Generating the samples from the estimated parameters
+                est_mui = intv_args_dict[comp]["est_params"]["mui"]
+                est_Si = intv_args_dict[comp]["est_params"]["Si"]
+                #Now we will generate samples from this distribution
+                intv_samples = np.random.multivariate_normal(est_mui,
+                                                        est_Si,
+                                                        size=sample_per_comp)
+                utarget_sample_list.append(intv_samples)
 
 
 
@@ -248,9 +317,11 @@ class GaussianMixtureSolver():
                                                         oracle_Si,
                                                         size=sample_per_comp)
                 utarget_oracle_sample_list.append(oracle_intv_samples)
+                oracle_actual_target_list.append(comp)
             elif self.dtype=="simulation" or self.dtype=="sachs":
                 oracle_intv_samples = intv_args_dict[comp]["samples"][0:sample_per_comp,:]
                 utarget_oracle_sample_list.append(oracle_intv_samples)
+                oracle_actual_target_list.append(comp)
             else:
                 raise NotImplementedError()
         
@@ -259,7 +330,7 @@ class GaussianMixtureSolver():
         #This is obs suff stat for the oracle
         oracle_obs_suffstat = partial_correlation_suffstat(oracle_obs_samples)
         #This is base suff stat when we dont want to use the obs as base in UTGSP
-        intv_base_suffstat = partial_correlation_suffstat(intv_est_samples)
+        # intv_base_suffstat = partial_correlation_suffstat(intv_est_samples)
 
 
         #Getting the interventional suff stat
@@ -268,13 +339,13 @@ class GaussianMixtureSolver():
         oracle_invariance_suffstat = gauss_invariance_suffstat(oracle_obs_samples, 
                                                 utarget_oracle_sample_list)
         #Getting the intv suff sata with intv base instead of obs
-        intv_base_invariance_suffstat = gauss_invariance_suffstat(
-                                                intv_est_samples, 
-                                                utarget_sample_list
-        )
+        # intv_base_invariance_suffstat = gauss_invariance_suffstat(
+        #                                         intv_est_samples, 
+        #                                         utarget_sample_list
+        # )
         #Getting intv suff stat for the igsp
         igsp_invariance_suffstat = gauss_invariance_suffstat(
-                                                intv_est_samples, 
+                                                obs_samples, 
                                                 igsp_sample_list
         )
 
@@ -291,8 +362,8 @@ class GaussianMixtureSolver():
                                         obs_suffstat, alpha=alpha)
         oracle_ci_tester = MemoizedCI_Tester(partial_correlation_test, 
                                         oracle_obs_suffstat, alpha=alpha)
-        intv_base_ci_tester = MemoizedCI_Tester(partial_correlation_test, 
-                                        intv_base_suffstat, alpha=alpha)
+        # intv_base_ci_tester = MemoizedCI_Tester(partial_correlation_test, 
+        #                                 intv_base_suffstat, alpha=alpha)
         
         
         invariance_tester = MemoizedInvarianceTester(
@@ -303,17 +374,17 @@ class GaussianMixtureSolver():
                                         gauss_invariance_test,
                                         oracle_invariance_suffstat, 
                                         alpha=alpha_inv)
-        inv_base_invariance_tester = MemoizedInvarianceTester(
-                                        gauss_invariance_test,
-                                        intv_base_invariance_suffstat, 
-                                        alpha=alpha_inv)
+        # inv_base_invariance_tester = MemoizedInvarianceTester(
+        #                                 gauss_invariance_test,
+        #                                 intv_base_invariance_suffstat, 
+        #                                 alpha=alpha_inv)
         igsp_invariance_tester = MemoizedInvarianceTester(
                                         gauss_invariance_test,
                                         igsp_invariance_suffstat, 
                                         alpha=alpha_inv)
         
         #Runnng UTGSP
-        setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
+        setting_list = [dict(known_interventions=[]) for _ in range(len(est_actual_target_list))]
         print("Running UTGSP")
         est_dag, est_targets_list = unknown_target_igsp(setting_list, 
                                                 set(list(range(num_nodes))), 
@@ -321,7 +392,7 @@ class GaussianMixtureSolver():
                                                 invariance_tester)
         
         #Running the Oracle-UTGSP (i.e with sample from correct params)
-        setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
+        setting_list = [dict(known_interventions=[]) for _ in range(len(oracle_actual_target_list))]
         print("Running Oracle-UTGSP")
         oracle_est_dag, oracle_est_targets_list = unknown_target_igsp(setting_list, 
                                                 set(list(range(num_nodes))), 
@@ -329,12 +400,13 @@ class GaussianMixtureSolver():
                                                 oracle_invariance_tester)
         
         #Running the UTGSP with different base instead of obs dist
-        setting_list = [dict(known_interventions=[]) for _ in range(len(actual_target_list))]
-        print("Running intv_base-UTGSP")
-        intv_base_est_dag, intv_base_est_targets_list = unknown_target_igsp(setting_list, 
-                                                set(list(range(num_nodes))), 
-                                                intv_base_ci_tester, 
-                                                inv_base_invariance_tester)
+        intv_base_est_dag, intv_base_est_targets_list = None, None
+        # setting_list = [dict(known_interventions=[]) for _ in range(len(est_actual_target_list))]
+        # print("Running intv_base-UTGSP")
+        # intv_base_est_dag, intv_base_est_targets_list = unknown_target_igsp(setting_list, 
+        #                                         set(list(range(num_nodes))), 
+        #                                         intv_base_ci_tester, 
+        #                                         inv_base_invariance_tester)
 
         #Running the IGSP to see the upper bound of the estimation
         #Question: Should we put extra obs data similar to UTGSP here?
@@ -352,14 +424,14 @@ class GaussianMixtureSolver():
         #rather than the parameter which is already done in the step1
         #unlike our last project where we matched target using JS.
         #Adding the estimated targets to the acutal targets dct
-        for act_tgt,est_tgt in zip(actual_target_list,est_targets_list):
+        for act_tgt,est_tgt in zip(est_actual_target_list,est_targets_list):
             intv_args_dict[act_tgt]["est_tgt"]=list(est_tgt)
         
-        for act_tgt,oracle_est_tgt in zip(actual_target_list,oracle_est_targets_list):
+        for act_tgt,oracle_est_tgt in zip(oracle_actual_target_list,oracle_est_targets_list):
             intv_args_dict[act_tgt]["oracle_est_tgt"]=list(oracle_est_tgt)
 
-        for act_tgt,intv_base_est_tgt in zip(actual_target_list,intv_base_est_targets_list):
-            intv_args_dict[act_tgt]["intv_base_est_tgt"]=list(intv_base_est_tgt)
+        # for act_tgt,intv_base_est_tgt in zip(est_actual_target_list,intv_base_est_targets_list):
+        #     intv_args_dict[act_tgt]["intv_base_est_tgt"]=list(intv_base_est_tgt)
         
         return est_dag,intv_args_dict,oracle_est_dag,igsp_est_dag,intv_base_est_dag
 
@@ -410,12 +482,15 @@ def run_mixture_disentangle(args):
     print("Step 1: Disentangling Mixture")
     gSolver = GaussianMixtureSolver(args["dtype"])
     #We will allow number of component = n+1 (hopefully it will find zero weight)
-    err,intv_args_dict,weight_precision_error = gSolver.mixture_disentangler(
+    err,intv_args_dict,weight_precision_error,est_num_comp = gSolver.mixture_disentangler(
                                                     args["num_tgt_prior"],
                                                     intv_args_dict,
                                                     mixture_samples,
-                                                    args["gmm_tol"])
+                                                    args["gmm_tol"],
+                                                    args["cutoff_drop_ratio"],
+                                                    )
     metric_dict["param_est_rel_err"]=err
+    metric_dict["est_num_comp"]=est_num_comp
     metric_dict["weight_precision_error"]=weight_precision_error
     print("error:",err)
     print("weight precision error:",metric_dict["weight_precision_error"])
@@ -441,12 +516,13 @@ def run_mixture_disentangle(args):
     print("==========================")
     print("Estimated Target List")
     for comp in intv_args_dict.keys():
-        print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
-                                        comp,
-                                        intv_args_dict[comp]["est_tgt"],
-                                        intv_args_dict[comp]["oracle_est_tgt"]
-                                        )
-        )
+        if "est_tgt" in intv_args_dict[comp]:
+            print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
+                                            comp,
+                                            intv_args_dict[comp]["est_tgt"],
+                                            intv_args_dict[comp]["oracle_est_tgt"]
+                                            )
+            )
     
     #Computing the SHD
     print("==========================")
@@ -504,9 +580,11 @@ def compute_shd(intv_args_dict,metric_dict):
     metric_dict["oracle_shd"]=oracle_shd
 
     #Computing the SHD for the intv_base base est dag
-    intv_base_est_dag = metric_dict["intv_base_est_dag"]
-    intv_base_shd = intv_base_est_dag.shd(act_dag)
-    metric_dict["intv_base_shd"]=intv_base_shd
+    metric_dict["intv_base_shd"]=None
+    if metric_dict["intv_base_est_dag"]!=None:
+        intv_base_est_dag = metric_dict["intv_base_est_dag"]
+        intv_base_shd = intv_base_est_dag.shd(act_dag)
+        metric_dict["intv_base_shd"]=intv_base_shd
 
     #Computing the shd for the oracle igsp dag
     metric_dict["igsp_shd"]=None
@@ -522,6 +600,11 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict,dtype):
     #Assumption: This assumes that the component is atomic
     right now.
     '''
+    metric_dict["avg_js"]=None
+    metric_dict["avg_oracle_js"]=None
+    metric_dict["avg_intv_base_js"]=None 
+    return metric_dict
+
     similarity_list = []
     oracle_similarity_list = []
     intv_base_similarity_list = []
@@ -602,7 +685,8 @@ def pickle_experiment_result_json(expt_args,intv_args_dict,metric_dict):
     #First of all we will remove any samples from this
     comp_list = intv_args_dict.keys()
     for comp in comp_list:
-        del intv_args_dict[comp]["samples"]
+        if "samples" in intv_args_dict[comp]:
+            del intv_args_dict[comp]["samples"]
 
     #Now we are ready to save the results
     experiment_dict = dict(
@@ -661,7 +745,8 @@ def jobber(all_expt_config,save_dir,num_parallel_calls):
                 gmm_tol=config_dict["gmm_tol"],
                 intv_type=config_dict["intv_type"],
                 new_noise_var=config_dict["new_noise_var"],
-                dtype="simulation"
+                dtype="simulation",
+                cutoff_drop_ratio=config_dict["cutoff_drop_ratio"],
         )
         if config_dict["intv_targets"]=="all":
             args["intv_targets"]=list(range(config_dict["num_nodes"]))
@@ -698,28 +783,29 @@ def run_simulation_experiments():
     # Graphs Related Parameters
     all_expt_config = dict(
         #Graph related parameters
-        run_list = list(range(1)), #for random runs with same config, needed?
-        num_nodes = [4,],
+        run_list = list(range(10)), #for random runs with same config, needed?
+        num_nodes = [4,8],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
         adj_dense_prop = [0.8],
-        noise_type=["gamma"], #"gaussian", or gamma
+        noise_type=["gaussian"], #"gaussian", or gamma
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         obs_noise_gamma_shape = [2.0],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["all"],
+        intv_targets = ["half"],
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
-        sample_size = [2**10,], #[2**idx for idx in range(10,21)],
+        sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
+        cutoff_drop_ratio=[0.07,]
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_gamma48-test4"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_n48"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
