@@ -192,7 +192,7 @@ class GaussianMixtureSolver():
                                 = self.get_best_estimated_matching_error(
                                                 intv_args_dict,gm)
 
-        return min_err,intv_args_dict,min_weight_precision_error,est_component
+        return min_err,intv_args_dict,min_weight_precision_error,est_component,log_lik_list
     
     def run_pc_over_each_component(self,intv_args_dict,num_samples):
         '''
@@ -313,20 +313,22 @@ class GaussianMixtureSolver():
 
 
             #Genearting the samples for the oracle using the exact parameters
-            if "left_comp_" in comp:
-                oracle_mui = intv_args_dict[comp]["true_params"]["mui"]
-                oracle_Si = intv_args_dict[comp]["true_params"]["Si"]
-                oracle_intv_samples = np.random.multivariate_normal(oracle_mui,
-                                                        oracle_Si,
-                                                        size=sample_per_comp)
-                utarget_oracle_sample_list.append(oracle_intv_samples)
-                oracle_actual_target_list.append(comp)
-            elif self.dtype=="simulation" or self.dtype=="sachs":
+            # if "left_comp_" in comp:
+            #     oracle_mui = intv_args_dict[comp]["true_params"]["mui"]
+            #     oracle_Si = intv_args_dict[comp]["true_params"]["Si"]
+            #     oracle_intv_samples = np.random.multivariate_normal(oracle_mui,
+            #                                             oracle_Si,
+            #                                             size=sample_per_comp)
+            #     utarget_oracle_sample_list.append(oracle_intv_samples)
+            #     oracle_actual_target_list.append(comp)
+            # elif self.dtype=="simulation" or self.dtype=="sachs":
+            #Only add to the oracel which are the true targets in the mixture
+            if "left_comp_" not in comp:
                 oracle_intv_samples = intv_args_dict[comp]["samples"][0:sample_per_comp,:]
                 utarget_oracle_sample_list.append(oracle_intv_samples)
                 oracle_actual_target_list.append(comp)
-            else:
-                raise NotImplementedError()
+            # else:
+            #     raise NotImplementedError()
         
         #Creating the suddicient statistics
         obs_suffstat = partial_correlation_suffstat(obs_samples)
@@ -485,7 +487,8 @@ def run_mixture_disentangle(args):
     print("Step 1: Disentangling Mixture")
     gSolver = GaussianMixtureSolver(args["dtype"])
     #We will allow number of component = n+1 (hopefully it will find zero weight)
-    err,intv_args_dict,weight_precision_error,est_num_comp = gSolver.mixture_disentangler(
+    err,intv_args_dict,weight_precision_error,est_num_comp,log_lik_list \
+                                    = gSolver.mixture_disentangler(
                                                     args["num_tgt_prior"],
                                                     intv_args_dict,
                                                     mixture_samples,
@@ -495,6 +498,7 @@ def run_mixture_disentangle(args):
     metric_dict["param_est_rel_err"]=err
     metric_dict["est_num_comp"]=est_num_comp
     metric_dict["weight_precision_error"]=weight_precision_error
+    metric_dict["log_lik_list"]=log_lik_list
     print("error:",err)
     print("weight precision error:",metric_dict["weight_precision_error"])
     
@@ -519,14 +523,26 @@ def run_mixture_disentangle(args):
     print("==========================")
     print("Estimated Target List")
     for comp in intv_args_dict.keys():
-        if "est_tgt" in intv_args_dict[comp]:
+        if "left_comp" in comp:
+            print("actual_tgt:{}\test_tgt:{}".format(
+                                            comp,
+                                            intv_args_dict[comp]["est_tgt"],
+                                            )
+            )
+        elif "est_tgt" in intv_args_dict[comp]:
             print("actual_tgt:{}\test_tgt:{}\toracle_tgt:{}".format(
                                             comp,
                                             intv_args_dict[comp]["est_tgt"],
                                             intv_args_dict[comp]["oracle_est_tgt"]
                                             )
             )
-    
+        else:
+            #All the targets will have the oracle targets
+            print("actual_tgt:{}\toracle_tgt:{}".format(
+                                            comp,
+                                            intv_args_dict[comp]["oracle_est_tgt"]
+                                            )
+            )
     #Computing the SHD
     print("==========================")
     metric_dict=compute_shd(intv_args_dict,metric_dict)
@@ -544,7 +560,7 @@ def run_mixture_disentangle(args):
     metric_dict=compute_target_jaccard_sim(intv_args_dict,metric_dict,args["dtype"])
     print("Avg JS:",metric_dict["avg_js"])
     print("Avg Oracle JS:",metric_dict["avg_oracle_js"])
-    print("Avg Intv Base JS:",metric_dict["avg_intv_base_js"])
+    # print("Avg Intv Base JS:",metric_dict["avg_intv_base_js"])
     
     
     #Dumping the experiment
@@ -603,11 +619,6 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict,dtype):
     #Assumption: This assumes that the component is atomic
     right now.
     '''
-    metric_dict["avg_js"]=None
-    metric_dict["avg_oracle_js"]=None
-    metric_dict["avg_intv_base_js"]=None 
-    return metric_dict
-
     similarity_list = []
     oracle_similarity_list = []
     intv_base_similarity_list = []
@@ -625,42 +636,45 @@ def compute_target_jaccard_sim(intv_args_dict,metric_dict,dtype):
             actual_tgt = set([int(intv_args_dict[comp]["tgt_idx"])])
         else:
             raise NotImplementedError()
-        est_tgt = set(intv_args_dict[comp]["est_tgt"])
-        oracle_est_tgt = set(intv_args_dict[comp]["oracle_est_tgt"])
-        intv_base_est_tgt = set(intv_args_dict[comp]["intv_base_est_tgt"])
-
+        
+        
         #Computing the est_target JS
-        if comp=="obs" and len(est_tgt.union(actual_tgt))==0:
-            js=1.0
-        else:
-            js = len(est_tgt.intersection(actual_tgt))\
-                        /len(est_tgt.union(actual_tgt))
+        #It is possible that we have less estimated component thatn actual
+        if "est_tgt" in intv_args_dict[comp]:
+            est_tgt = set(intv_args_dict[comp]["est_tgt"])
+            if comp=="obs" and len(est_tgt.union(actual_tgt))==0:
+                js=1.0
+            else:
+                js = len(est_tgt.intersection(actual_tgt))\
+                            /len(est_tgt.union(actual_tgt))
+            similarity_list.append(js)
+
         
         #Computing the oracle JS
+        oracle_est_tgt = set(intv_args_dict[comp]["oracle_est_tgt"])
         if comp=="obs" and len(oracle_est_tgt.union(actual_tgt))==0:
             oracle_js=1.0
         else:
             oracle_js = len(oracle_est_tgt.intersection(actual_tgt))\
                         /len(oracle_est_tgt.union(actual_tgt))
+        oracle_similarity_list.append(oracle_js)
         
         #Computing the inv base JS
-        if comp=="obs" and len(intv_base_est_tgt.union(actual_tgt))==0:
-            intv_base_js=1.0
-        else:
-            intv_base_js = len(intv_base_est_tgt.intersection(actual_tgt))\
-                        /len(intv_base_est_tgt.union(actual_tgt))
-        
-        similarity_list.append(js)
-        oracle_similarity_list.append(oracle_js)
-        intv_base_similarity_list.append(intv_base_js)
+        # intv_base_est_tgt = set(intv_args_dict[comp]["intv_base_est_tgt"])
+        # if comp=="obs" and len(intv_base_est_tgt.union(actual_tgt))==0:
+        #     intv_base_js=1.0
+        # else:
+        #     intv_base_js = len(intv_base_est_tgt.intersection(actual_tgt))\
+        #                 /len(intv_base_est_tgt.union(actual_tgt))
+        # intv_base_similarity_list.append(intv_base_js)
 
     avg_js = np.mean(similarity_list)
     avg_oracle_js = np.mean(oracle_similarity_list)
-    avg_intv_base_js = np.mean(intv_base_similarity_list)
+    # avg_intv_base_js = np.mean(intv_base_similarity_list)
 
     metric_dict["avg_js"]=avg_js
     metric_dict["avg_oracle_js"]=avg_oracle_js
-    metric_dict["avg_intv_base_js"]=avg_intv_base_js
+    # metric_dict["avg_intv_base_js"]=avg_intv_base_js
 
     return metric_dict
 
@@ -820,12 +834,12 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_lofs_sachs-middleout"
+    save_dir = "all_expt_logs/expt_lofs_sachs-middleout_all_obs_oracle_corr"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
     dataset_path="datasets/sachs_yuhaow.csv"
-    all_sample_size_factor = [5]
+    all_sample_size_factor = [1,2,3,4,5,6,7]
     gmm_tol=1000
     run_list = range(10)
     num_tgt_prior=12
