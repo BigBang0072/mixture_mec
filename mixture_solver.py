@@ -139,6 +139,9 @@ class GaussianMixtureSolver():
         # print("back")
         bwd_cutoff_idx = 0 
         for idx in range(len(log_lik_list)-1,1,-1):
+            print("\nbwidx:{},change_ratio:{}",idx,
+                    ((np.abs(log_lik_list[idx]-log_lik_list[idx-1])
+                        )/np.abs(log_lik_list[idx])))
             if ((np.abs(log_lik_list[idx]-log_lik_list[idx-1])
                         )/np.abs(log_lik_list[idx]))>cutoff_drop_ratio:
                 bwd_cutoff_idx=idx
@@ -174,7 +177,7 @@ class GaussianMixtureSolver():
                             cutoff_drop_ratio)
         gm=gm_dict[est_component]
         print("Number of component selected: ",est_component)
-        
+
         if debug:
             print("==================================")
             print("Estimated Means (unmatched):")
@@ -784,7 +787,7 @@ def run_simulation_experiments():
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,8],
+        num_nodes = [4,8,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -795,7 +798,7 @@ def run_simulation_experiments():
         obs_noise_gamma_shape = [2.0],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["half"],
+        intv_targets = ["all"], #all, half
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
@@ -805,7 +808,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_n48"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_n48-all"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
@@ -817,15 +820,16 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_lofs_sachs-15"
+    save_dir = "all_expt_logs/expt_lofs_sachs-middleout"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
     dataset_path="datasets/sachs_yuhaow.csv"
-    all_sample_size_factor = range(1,8)
+    all_sample_size_factor = [5]
     gmm_tol=1000
     run_list = range(10)
     num_tgt_prior=12
+    cutoff_drop_ratio=0.01
     
 
 
@@ -854,6 +858,7 @@ def run_sachs_experiments():
                         stage2_samples = config_dict["sample_size"],
                         gmm_tol=config_dict["gmm_tol"],
                         num_tgt_prior=num_tgt_prior,
+                        cutoff_drop_ratio=cutoff_drop_ratio,
                         # intv_type=config_dict["intv_type"],
                         # new_noise_var=config_dict["new_noise_var"],
                         dtype="sachs"
@@ -867,11 +872,9 @@ def run_sachs_experiments():
 
 if __name__=="__main__":
     #If we want to run the simulation experiments then we will open this
-    run_simulation_experiments()
+    # run_simulation_experiments()
 
     #If we want to run the resutls on the SACHS dataset
-    # run_sachs_experiments()
-
-    
+    run_sachs_experiments()
     
     
