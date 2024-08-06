@@ -121,9 +121,12 @@ class GaussianSCM:
                                         noise_Di,obs_noise_gamma_shape):
         '''
         '''
+        scale_param = 0.71
         #First of all sampling the noise
         noise = np.random.gamma(obs_noise_gamma_shape,
-                                    scale=1.0,size=(num_samples,self.dim))
+                                    scale=scale_param,size=(num_samples,self.dim))
+        #Zero centring the noise
+        noise = noise - obs_noise_gamma_shape*scale_param
         #Now we will apply the filter of internvetion using the proxy of noise D
         Bi = np.linalg.inv(np.eye(self.dim)-Ai)
         X = np.matmul(np.matmul(Bi,noise_Di),noise.T).T 
@@ -131,6 +134,8 @@ class GaussianSCM:
         #Getting the corresponding mean and variance of X now
         x_mui = np.mean(X,axis=0)
         Si = np.cov(X,rowvar=False)
+
+        # pdb.set_trace()
 
         return X,Si,x_mui
     
