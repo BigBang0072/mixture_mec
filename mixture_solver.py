@@ -150,7 +150,8 @@ class GaussianMixtureSolver():
         print("fwd_cutoff_idx: ",fwd_cutoff_idx)
         print("bwd_cutoff_idx: ",bwd_cutoff_idx)
         
-        num_component = int(((fwd_cutoff_idx+1)+(bwd_cutoff_idx+1))/2)
+        # num_component = int(((fwd_cutoff_idx+1)+(bwd_cutoff_idx+1))/2)
+        num_component = bwd_cutoff_idx+1
         return num_component
 
     def mixture_disentangler(self,max_component,
@@ -158,7 +159,7 @@ class GaussianMixtureSolver():
                 mixture_samples,
                 tol,cutoff_drop_ratio,
                 debug=False,
-                bic_sel=True):
+                bic_sel=False):
         #Performing the mixture model selection
         gm_score_dict=None
         if bic_sel:
@@ -830,8 +831,8 @@ def run_simulation_experiments():
     # Graphs Related Parameters
     all_expt_config = dict(
         #Graph related parameters
-        run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [4,8,],
+        run_list = list(range(3)), #for random runs with same config, needed?
+        num_nodes = [6,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -842,7 +843,7 @@ def run_simulation_experiments():
         obs_noise_gamma_shape = [2.0],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["all"], #all, half
+        intv_targets = ["half"], #all, half
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
@@ -852,7 +853,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_n48-all"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_n48_middleout_oracle_corr-half6"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
@@ -869,9 +870,9 @@ def run_sachs_experiments():
 
     #Setting up the dataset path and other parameters
     dataset_path="datasets/sachs_yuhaow.csv"
-    all_sample_size_factor = [1,2,3,4,5,6,7]
+    all_sample_size_factor = [7]
     gmm_tol=1000
-    run_list = range(10)
+    run_list = range(1)
     num_tgt_prior=12
     cutoff_drop_ratio=0.01
     
@@ -916,9 +917,9 @@ def run_sachs_experiments():
 
 if __name__=="__main__":
     #If we want to run the simulation experiments then we will open this
-    # run_simulation_experiments()
+    run_simulation_experiments()
 
     #If we want to run the resutls on the SACHS dataset
-    run_sachs_experiments()
+    # run_sachs_experiments()
     
     
