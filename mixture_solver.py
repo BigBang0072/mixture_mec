@@ -853,7 +853,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_n48_middleout_oracle_corr-half6"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_n48_middleout_oracle_corr-half6_actual"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
