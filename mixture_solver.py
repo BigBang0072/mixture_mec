@@ -843,7 +843,7 @@ def run_simulation_experiments():
         obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["all"], #all, half
+        intv_targets = ["half"], #all, half
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
@@ -853,7 +853,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_all"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_half"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
