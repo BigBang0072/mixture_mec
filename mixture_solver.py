@@ -831,8 +831,8 @@ def run_simulation_experiments():
     # Graphs Related Parameters
     all_expt_config = dict(
         #Graph related parameters
-        run_list = list(range(3)), #for random runs with same config, needed?
-        num_nodes = [6,],
+        run_list = list(range(10)), #for random runs with same config, needed?
+        num_nodes = [4,6,8,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
@@ -840,10 +840,10 @@ def run_simulation_experiments():
         noise_type=["gaussian"], #"gaussian", or gamma
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
-        obs_noise_gamma_shape = [2.0],
+        obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["half"], #all, half
+        intv_targets = ["all"], #all, half
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
@@ -853,7 +853,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_n48_middleout_oracle_corr-half6_actual"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_all"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
