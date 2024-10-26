@@ -91,6 +91,19 @@ class GaussianMixtureSolver():
                 min_perm=req_comp_perm
                 min_weight_precision_error=weight_precision_error
         
+        '''
+        Note: In the min-error estimation we dont add the error for the case
+        when we have less number of component whereas the actual tgt are more.
+        So if we dont predict anything --> parameter estimation will be zero
+        So, param est error alone is not a good metric to judge the result.
+
+
+        But it is fine that:
+        1. we dont asssume that our model has estimated those parameters 
+            as zero which could be wrong (cuz pi=0 then the param could be arbit even inf)
+        2. Also we report the number of component anyway 
+        '''
+        
         if debug:
             print("error:",min_err)
             print("min_perm:",min_perm)
@@ -330,6 +343,11 @@ class GaussianMixtureSolver():
                 else:
                     raise NotImplementedError()
 
+            '''
+            So here in case we have estimated less num of comp
+            we will not have the estimated params for those actual targets
+            Thus this if statement.
+            '''
             if "est_params" in intv_args_dict[comp]:
                 est_actual_target_list.append(comp)
                 #Generating the samples from the estimated parameters
@@ -842,18 +860,18 @@ def run_simulation_experiments():
         obs_noise_var = [1.0],
         obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
-        new_noise_mean= [1.0],
-        intv_targets = ["half",], #all, half
-        intv_type = ["do"], #hard,do,soft
-        new_noise_var = [None],#[0.1,1.0,2.0,8.0],
+        new_noise_mean= [0.1,0.2,0.5,1.0],
+        intv_targets = ["all",], #all, half
+        intv_type = ["hard"], #hard,do,soft
+        new_noise_var = [1.0],#,1.0,4.0,8.0],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
-        cutoff_drop_ratio=[0.01,0.15,0.3,0.6]
+        cutoff_drop_ratio=[0.07]
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_cutoff_var_half"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_new_mean"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
