@@ -843,17 +843,17 @@ def run_simulation_experiments():
         obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["all","half"], #all, half
+        intv_targets = ["half",], #all, half
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],#[0.1,1.0,2.0,8.0],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
-        cutoff_drop_ratio=[0.01,0.04,0.15]
+        cutoff_drop_ratio=[0.01,0.15,0.3,0.6]
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_cutoff_var"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_cutoff_var_half"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
