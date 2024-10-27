@@ -854,16 +854,16 @@ def run_simulation_experiments():
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
-        adj_dense_prop = [0.8],
+        adj_dense_prop = [0.1,0.4,0.6,1.0],
         noise_type=["gaussian"], #"gaussian", or gamma
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
         obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
-        new_noise_mean= [100],
+        new_noise_mean= [1.0],
         intv_targets = ["all",], #all, half
-        intv_type = ["hard"], #hard,do,soft
-        new_noise_var = [0.1,1.0,4.0,8.0,32.0],
+        intv_type = ["do"], #hard,do,soft
+        new_noise_var = [None],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
@@ -871,7 +871,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_new_var_largemean"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_density_var"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
