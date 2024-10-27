@@ -860,10 +860,10 @@ def run_simulation_experiments():
         obs_noise_var = [1.0],
         obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
-        new_noise_mean= [1.0,10,100,1000],
+        new_noise_mean= [100],
         intv_targets = ["all",], #all, half
         intv_type = ["hard"], #hard,do,soft
-        new_noise_var = [1.0],#,1.0,4.0,8.0],
+        new_noise_var = [0.1,1.0,4.0,8.0,32.0],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
@@ -871,7 +871,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_new_mean_largerange"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_new_var_largemean"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
