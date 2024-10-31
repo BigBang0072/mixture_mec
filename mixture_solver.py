@@ -152,7 +152,7 @@ class GaussianMixtureSolver():
         
         # print("back")
         bwd_cutoff_idx = 0 
-        for idx in range(len(log_lik_list)-1,1,-1):
+        for idx in range(len(log_lik_list)-1,0,-1):
             print("\nbwidx:{},change_ratio:{}",idx,
                     ((np.abs(log_lik_list[idx]-log_lik_list[idx-1])
                         )/np.abs(log_lik_list[idx])))
@@ -850,11 +850,11 @@ def run_simulation_experiments():
     all_expt_config = dict(
         #Graph related parameters
         run_list = list(range(10)), #for random runs with same config, needed?
-        num_nodes = [6,],
+        num_nodes = [4,6,8,],
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
-        adj_dense_prop = [0.1,0.4,0.6,1.0],
+        adj_dense_prop = [0.8],
         noise_type=["gaussian"], #"gaussian", or gamma
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
@@ -871,7 +871,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backward_cameraready_density_var"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backwardbugfixed_cameraready_all"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
@@ -883,7 +883,7 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_lofs_sachs-middleout_all_obs_oracle_corr_bic"
+    save_dir = "all_expt_logs/expt_logs_sachs_compsel_backwardbugfixed_cameraready_cutoff_var"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
@@ -892,7 +892,7 @@ def run_sachs_experiments():
     gmm_tol=1000
     run_list = range(1)
     num_tgt_prior=12
-    cutoff_drop_ratio=0.01
+    cutoff_drop_ratio_list=[0.01,0.07,0.15,0.30]
     
 
 
@@ -900,33 +900,34 @@ def run_sachs_experiments():
     counter=0
     for run_num in run_list:
         for sfactor in all_sample_size_factor:
-            counter+=1
-            config_dict=dict(
-                gmm_tol = gmm_tol,
-                sample_size = int(600*sfactor)
-            )
-            args = dict(
-                        save_dir=save_dir,
-                        dataset_path=dataset_path,
-                        exp_name="{}".format(counter),
-                        # num_nodes = config_dict["num_nodes"],
-                        # obs_noise_mean = config_dict["obs_noise_mean"],
-                        # obs_noise_var = config_dict["obs_noise_var"],
-                        # max_edge_strength = config_dict["max_edge_strength"],
-                        # graph_sparsity_method = config_dict["graph_sparsity_method"],
-                        # adj_dense_prop = config_dict["adj_dense_prop"],
-                        # num_parents = config_dict["num_parents"],
-                        # new_noise_mean = config_dict["new_noise_mean"],
-                        mix_samples = config_dict["sample_size"],
-                        stage2_samples = config_dict["sample_size"],
-                        gmm_tol=config_dict["gmm_tol"],
-                        num_tgt_prior=num_tgt_prior,
-                        cutoff_drop_ratio=cutoff_drop_ratio,
-                        # intv_type=config_dict["intv_type"],
-                        # new_noise_var=config_dict["new_noise_var"],
-                        dtype="sachs"
-            )
-            expt_args_list.append(args)
+            for cutoff_drop_ratio in cutoff_drop_ratio_list:
+                counter+=1
+                config_dict=dict(
+                    gmm_tol = gmm_tol,
+                    sample_size = int(600*sfactor)
+                )
+                args = dict(
+                            save_dir=save_dir,
+                            dataset_path=dataset_path,
+                            exp_name="{}".format(counter),
+                            # num_nodes = config_dict["num_nodes"],
+                            # obs_noise_mean = config_dict["obs_noise_mean"],
+                            # obs_noise_var = config_dict["obs_noise_var"],
+                            # max_edge_strength = config_dict["max_edge_strength"],
+                            # graph_sparsity_method = config_dict["graph_sparsity_method"],
+                            # adj_dense_prop = config_dict["adj_dense_prop"],
+                            # num_parents = config_dict["num_parents"],
+                            # new_noise_mean = config_dict["new_noise_mean"],
+                            mix_samples = config_dict["sample_size"],
+                            stage2_samples = config_dict["sample_size"],
+                            gmm_tol=config_dict["gmm_tol"],
+                            num_tgt_prior=num_tgt_prior,
+                            cutoff_drop_ratio=cutoff_drop_ratio,
+                            # intv_type=config_dict["intv_type"],
+                            # new_noise_var=config_dict["new_noise_var"],
+                            dtype="sachs"
+                )
+                expt_args_list.append(args)
     
     # run_mixture_disentangle(expt_args_list[0])
     with mp.Pool(num_parallel_calls) as p:
@@ -935,9 +936,9 @@ def run_sachs_experiments():
 
 if __name__=="__main__":
     #If we want to run the simulation experiments then we will open this
-    run_simulation_experiments()
+    # run_simulation_experiments()
 
     #If we want to run the resutls on the SACHS dataset
-    # run_sachs_experiments()
+    run_sachs_experiments()
     
     

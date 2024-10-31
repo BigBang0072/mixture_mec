@@ -283,7 +283,7 @@ def generate_mixture_sachs(fpath,num_samples):
     num_nodes = A.shape[0]
     
     #We will keep the net number of sample same so that the number of component doesnt have any effect
-    num_samples = num_samples//(len(intv_targets)+1)
+    # num_samples = num_samples//(len(intv_targets)+1)
 
     #Adding the observational data
     print("Getting the observational data")
@@ -291,6 +291,7 @@ def generate_mixture_sachs(fpath,num_samples):
     intv_args_dict["obs"]["tgt_idx"]=None
     obs_samples = df[(df["experiment"]==1) | (df["experiment"]==2)
                         ].drop(columns=["experiment"]).to_numpy()
+    print("num samples: obs: ",obs_samples.shape[0])
     mixture_samples.append(obs_samples)
     intv_args_dict["obs"]["samples"]=obs_samples
     intv_args_dict["obs"]["true_params"]=dict(
@@ -305,7 +306,8 @@ def generate_mixture_sachs(fpath,num_samples):
         print("Getting the internvetional data: ",tgt)
         #Getting the internvetional data for this target
         intv_samples = df[df["experiment"]==expt_num].drop(
-                            columns=["experiment"])[0:num_samples].to_numpy()
+                            columns=["experiment"]).to_numpy()
+        print("num_samples: {}: {}".format(tgt,intv_samples.shape[0]))
         mixture_samples.append(intv_samples)
         #Addig the internvetion info
         intv_args_dict[tgt]={}
