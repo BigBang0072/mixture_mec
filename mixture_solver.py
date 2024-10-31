@@ -861,7 +861,7 @@ def run_simulation_experiments():
         obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
         new_noise_mean= [1.0],
-        intv_targets = ["all",], #all, half
+        intv_targets = ["half",], #all, half
         intv_type = ["do"], #hard,do,soft
         new_noise_var = [None],
         #Sample and other statistical parameters
@@ -871,7 +871,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backwardbugfixed_cameraready_all"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backwardbugfixed_cameraready_half"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
@@ -936,9 +936,9 @@ def run_sachs_experiments():
 
 if __name__=="__main__":
     #If we want to run the simulation experiments then we will open this
-    # run_simulation_experiments()
+    run_simulation_experiments()
 
     #If we want to run the resutls on the SACHS dataset
-    run_sachs_experiments()
+    # run_sachs_experiments()
     
     
