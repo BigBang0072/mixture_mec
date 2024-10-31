@@ -860,10 +860,10 @@ def run_simulation_experiments():
         obs_noise_var = [1.0],
         obs_noise_gamma_shape = [None],
         #Intervnetion related related parameretrs
-        new_noise_mean= [1,10,100,1000],
+        new_noise_mean= [0.0],
         intv_targets = ["half",], #all, half
         intv_type = ["hard"], #hard,do,soft
-        new_noise_var = [1.0],
+        new_noise_var = [1e-4,1e-1,1.0,100,1000],
         #Sample and other statistical parameters
         sample_size = [2**idx for idx in range(10,21)],
         gmm_tol = [1e-3], #1e-3 default #10000,5000,1000 for large nodes
@@ -871,7 +871,7 @@ def run_simulation_experiments():
     )
 
 
-    save_dir="all_expt_logs/expt_logs_sim_compsel_backwardbugfixed_cameraready_half_mean_var"
+    save_dir="all_expt_logs/expt_logs_sim_compsel_backwardbugfixed_cameraready_half_std_var"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
     jobber(all_expt_config,save_dir,num_parallel_calls=64)
 
@@ -883,7 +883,7 @@ def run_sachs_experiments():
     '''
     num_parallel_calls=64
     #Setting up the save directory
-    save_dir = "all_expt_logs/expt_logs_sachs_compsel_backwardbugfixed_cameraready_cutoff_var"
+    save_dir = "all_expt_logs/expt_logs_sachs_compsel_backwardbugfixed_cameraready_temp"
     pathlib.Path(save_dir).mkdir(parents=True,exist_ok=True)
 
     #Setting up the dataset path and other parameters
@@ -892,7 +892,7 @@ def run_sachs_experiments():
     gmm_tol=1000
     run_list = range(1)
     num_tgt_prior=12
-    cutoff_drop_ratio_list=[0.01,0.07,0.15,0.30]
+    cutoff_drop_ratio_list=[0.01,]
     
 
 
@@ -936,9 +936,9 @@ def run_sachs_experiments():
 
 if __name__=="__main__":
     #If we want to run the simulation experiments then we will open this
-    run_simulation_experiments()
+    # run_simulation_experiments()
 
     #If we want to run the resutls on the SACHS dataset
-    # run_sachs_experiments()
+    run_sachs_experiments()
     
     
