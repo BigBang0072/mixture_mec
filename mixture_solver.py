@@ -9,6 +9,7 @@ import json
 import pathlib
 import multiprocessing as mp
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 from pgmpy.estimators import PC
@@ -854,7 +855,7 @@ def run_simulation_experiments():
         max_edge_strength = [1.0,],
         graph_sparsity_method=["adj_dense_prop",],#[adj_dense_prop, use num_parents]
         num_parents = [None],
-        adj_dense_prop = [0.1,0.4,0.6,1.0],
+        adj_dense_prop = [0.6],
         noise_type=["gaussian"], #"gaussian", or gamma
         obs_noise_mean = [0.0],
         obs_noise_var = [1.0],
