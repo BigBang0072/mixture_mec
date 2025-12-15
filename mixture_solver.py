@@ -936,10 +936,28 @@ def run_sachs_experiments():
     print("Completed the whole experiment!")
 
 if __name__=="__main__":
-    #If we want to run the simulation experiments then we will open this
-    run_simulation_experiments()
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Run experiments: simulations or Sachs dataset"
+    )
 
-    #If we want to run the resutls on the SACHS dataset
-    # run_sachs_experiments()
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--simulation",
+        action="store_true",
+        help="Run simulation experiments"
+    )
+    group.add_argument(
+        "--sachs",
+        action="store_true",
+        help="Run Sachs dataset experiments"
+    )
+
+    args = parser.parse_args()
+
+    if args.simulation:
+        run_simulation_experiments()
+    elif args.sachs:
+        run_sachs_experiments()
     
     
